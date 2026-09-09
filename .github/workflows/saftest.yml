@@ -70,7 +70,9 @@ jobs:
         run: python fix/saftest/patch_godot.py godot
       - name: Build arm64 editor
         working-directory: godot
-        run: scons platform=android target=editor arch=arm64 production=yes -j2
+        run: |
+          python misc/scripts/install_swappy_android.py
+          scons platform=android target=editor arch=arm64 production=yes -j2
       - name: Package editor
         working-directory: godot/platform/android/java
         run: ./gradlew generateGodotEditor --no-daemon
