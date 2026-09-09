@@ -19,6 +19,14 @@ class SafExportTest {
     @Test fun buildWithoutCopyIsUntouched() {
         assertNull(SafExport.plan(listOf("bundleStandardRelease"), "/tmp/demo"))
     }
+    @Test fun godotFilePrefixPreservesLiteralPath() {
+        val root = "/tmp/demo space%20"
+        val plan = SafExport.plan(args("file:$root/builds"), root)!!
+        assertEquals(listOf("builds"), plan.directories)
+    }
+    @Test(expected = IllegalArgumentException::class) fun prefixedTraversalIsRejected() {
+        SafExport.plan(args("file:/tmp/demo/../other"), "/tmp/demo")
+    }
     @Test(expected = IllegalArgumentException::class) fun siblingIsRejected() {
         SafExport.plan(args("/tmp/demo-other"), "/tmp/demo")
     }

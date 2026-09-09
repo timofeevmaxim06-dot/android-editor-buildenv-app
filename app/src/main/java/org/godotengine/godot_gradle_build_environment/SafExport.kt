@@ -15,7 +15,11 @@ internal object SafExport {
         fun property(name: String): String = args.lastOrNull { it.startsWith("-P$name=") }
             ?.substringAfter('=') ?: error("Missing export property: $name")
         val root = File(projectPath).canonicalFile
-        val destination = File(property("export_path")).canonicalFile
+        // Godot prefixes the literal absolute path with "file:" for Gradle.
+        // It does not URI-encode it: keep spaces and percent signs unchanged.
+        val exportPath = property("export_path").removePrefix("file:")
+        require(File(exportPath).isAbsolute) { "Export path must be absolute" }
+        val destination = File(exportPath).canonicalFile
         require(destination == root || destination.path.startsWith(root.path + File.separator)) {
             "Test export must stay inside the granted project folder"
         }
