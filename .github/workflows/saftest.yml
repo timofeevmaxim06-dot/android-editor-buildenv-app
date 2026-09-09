@@ -21,6 +21,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
       - name: Install build prerequisites
         run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
       - name: Build proot from source
@@ -60,6 +61,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
       - name: Install build prerequisites
         run: |
           sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
