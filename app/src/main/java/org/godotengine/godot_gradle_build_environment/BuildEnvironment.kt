@@ -460,11 +460,18 @@ class BuildEnvironment(private val context: Context, private val rootfs: String,
             outputHandler(type, line)
         }
 
+        val exportPlan = try {
+            if (BuildConfig.FLAVOR == "android") SafExport.plan(rawGradleArgs, projectPath) else null
+        } catch (e: Exception) {
+            outputHandler(OUTPUT_STDERR, "SAF export setup failed: ${e.message}")
+            return 1
+        }
+        val stagedArgs = exportPlan?.let { SafExport.arguments(rawGradleArgs, it) } ?: rawGradleArgs
         val gradleArgs =  if (BuildConfig.FLAVOR == "picoos" || BuildConfig.FLAVOR == "horizonos") {
             // GABE has full storage access on XR devices, so we are not pulling addons dir, or keystore files.
             rawGradleArgs
         } else {
-            fixGradleArgs(projectPath, rawGradleArgs)
+            fixGradleArgs(projectPath, stagedArgs)
         }
 
         var result = executeGradleInternal(gradleArgs, workDir, captureOutputHandler)
@@ -499,6 +506,15 @@ class BuildEnvironment(private val context: Context, private val rootfs: String,
             }
         }
 
+        if (result == 0 && exportPlan != null) {
+            try {
+                SafExport.publish(context, projectPath, workDir, exportPlan)
+                outputHandler(OUTPUT_INFO, "> SAF export completed and SHA-256 verified")
+            } catch (e: Exception) {
+                outputHandler(OUTPUT_STDERR, "SAF export failed: ${e.message}")
+                return 1
+            }
+        }
         return result
     }
 

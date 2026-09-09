@@ -1,0 +1,95 @@
+name: Isolated Godot and GABE SAF test
+on:
+  push:
+    branches: [saftest-pair-20260909]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saftest-pair
+  cancel-in-progress: false
+jobs:
+  gabe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install build prerequisites
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
+      - name: Build proot from source
+        run: ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/29.0.14206865" thirdparty/proot/build.sh
+      - name: Test and build GABE
+        run: ./gradlew testAndroidDebugUnitTest assembleAndroidDebug --no-daemon
+      - name: Verify isolated package and native payload
+        run: |
+          APK=app/build/outputs/apk/android/debug/app-android-debug.apk
+          test "$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK")" = org.godotengine.godot_gradle_build_environment.saftest
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libproot.so'
+          sha256sum "$APK" > GABE-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gabe-saftest
+          path: |
+            app/build/outputs/apk/android/debug/*.apk
+            GABE-SHA256.txt
+            app/build/test-results/testAndroidDebugUnitTest/
+          if-no-files-found: error
+  godot:
+    needs: gabe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fix
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ed1daf0bf001b61586d9930840f2f1394092c079
+          path: godot
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install build prerequisites
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
+          pip install scons==4.8.1
+      - name: Patch only editor identity and build provider
+        run: python fix/saftest/patch_godot.py godot
+      - name: Build arm64 editor
+        working-directory: godot
+        run: scons platform=android target=editor arch=arm64 production=yes -j2
+      - name: Package editor
+        working-directory: godot/platform/android/java
+        run: ./gradlew generateGodotEditor --no-daemon
+      - name: Verify isolated package
+        working-directory: godot
+        run: |
+          find bin/android_editor_builds -name '*.apk' -print
+          for APK in bin/android_editor_builds/*.apk; do
+            ID=$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$APK")
+            case "$ID" in
+              org.godotengine.editor.v4.saftest.debug|org.godotengine.editor.v4.saftest.release) ;;
+              *) echo 'Unexpected application ID'; exit 1 ;;
+            esac
+          done
+          sha256sum bin/android_editor_builds/*.apk > GODOT-SHA256.txt
+          git diff > GODOT-SAF-TEST.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-saftest
+          path: |
+            godot/bin/android_editor_builds/*.apk
+            godot/GODOT-SHA256.txt
+            godot/GODOT-SAF-TEST.patch
+          if-no-files-found: error

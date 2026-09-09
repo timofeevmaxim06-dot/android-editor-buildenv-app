@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">Godot Android Build Environment</string>
-    <string name="app_launcher_name">GABE</string>
+    <string name="app_name">GABE SAF Test</string>
+    <string name="app_launcher_name">GABE SAF Test</string>
     <string name="install_rootfs_button">Install Rootfs</string>
     <string name="install_rootfs_local_button">Install from local file</string>
     <string name="delete_rootfs_button">Delete Rootfs</string>

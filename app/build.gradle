@@ -21,11 +21,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.godotengine.godot_gradle_build_environment"
+        applicationId = "org.godotengine.godot_gradle_build_environment.saftest"
         minSdk = 24
         targetSdk = 36
         versionCode = 7
-        versionName = "1.0.1"
+        versionName = "1.0.1-saftest1"
 
         ndk {
             abiFilters.add("arm64-v8a")
@@ -59,7 +59,7 @@ android {
     productFlavors {
         android {
             dimension "android_distribution"
-            def godotEditorPackage = "org.godotengine.editor.v4"
+            def godotEditorPackage = "org.godotengine.editor.v4.saftest"
             manifestPlaceholders = [editorPackage: godotEditorPackage]
             buildConfigField("String", "EDITOR_PACKAGE", "\"${godotEditorPackage}\"")
             getIsDefault().set(true)
