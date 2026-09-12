@@ -45,11 +45,18 @@ jobs:
           cp recipe/phone_editor/README.md evidence/README.md
           git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
           git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
-      - name: Set up pinned JDK
+      - name: Download exact JDK with checksum verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/phone-jdk.tar.gz" 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz'
+          printf '3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e  %s\n' "$RUNNER_TEMP/phone-jdk.tar.gz" | sha256sum --check --strict
+      - name: Set up verified JDK archive
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
-          distribution: temurin
-          java-version: '17.0.20.1+1'
+          distribution: jdkfile
+          java-version: '17'
+          jdkFile: ${{ runner.temp }}/phone-jdk.tar.gz
       - name: Set up Android SDK
         uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
       - name: Install fixed build prerequisites
