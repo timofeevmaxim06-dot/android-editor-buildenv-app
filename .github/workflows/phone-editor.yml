@@ -1,0 +1,119 @@
+name: Godot Phone Preview 1
+
+on:
+  push:
+    branches: [phone-editor-preview-20260912]
+    paths:
+      - 'phone_editor/**'
+      - '.github/workflows/phone-editor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-editor-preview-1
+  cancel-in-progress: false
+
+jobs:
+  editor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout isolated build recipe
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: recipe
+          persist-credentials: false
+      - name: Checkout pinned Godot 4.7.2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: godotengine/godot
+          ref: ed1daf0bf001b61586d9930840f2f1394092c079
+          path: godot
+          persist-credentials: false
+      - name: Verify base and patch contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C godot rev-parse HEAD)" = ed1daf0bf001b61586d9930840f2f1394092c079
+          mkdir -p evidence
+          python recipe/phone_editor/test_mobile_patch.py godot 2>&1 | tee evidence/source-tests.txt
+          python recipe/phone_editor/apply_mobile_patch.py godot | tee evidence/patch-manifest.json
+          git -C godot diff --check
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-1.patch
+          cp recipe/phone_editor/README.md evidence/README.md
+          git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
+          git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
+      - name: Set up pinned JDK
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17.0.20.1+1'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
+      - name: Install fixed build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
+          pip install scons==4.8.1
+          {
+            java -version
+            javac -version
+            scons --version
+            uname -a
+            printenv ImageOS ImageVersion
+            cat "$ANDROID_HOME/ndk/29.0.14206865/source.properties"
+            cat "$ANDROID_HOME/build-tools/36.1.0/source.properties"
+          } > evidence/toolchain.txt 2>&1
+      - name: Install upstream frame pacing library
+        working-directory: godot
+        run: python misc/scripts/install_swappy_android.py
+      - name: Record frame pacing dependency
+        run: sha256sum godot/thirdparty/swappy-frame-pacing/*/libswappy_static.a > evidence/SWAPPY-SHA256.txt
+      - name: Compile ARM64 editor
+        working-directory: godot
+        run: scons platform=android target=editor arch=arm64 production=yes -j2
+      - name: Package test-signed editor
+        working-directory: godot/platform/android/java
+        run: ./gradlew generateGodotEditor --no-daemon
+      - name: Verify APK identity, signature and alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          phone_apks=(godot/bin/android_editor_builds/*.apk)
+          test "${#phone_apks[@]}" -gt 0
+          mkdir -p deliverables
+          for phone_apk in "${phone_apks[@]}"; do
+            phone_name=$(basename "$phone_apk")
+            phone_id=$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$phone_apk")
+            case "$phone_id" in
+              org.godotengine.editor.v4.phonepreview1.debug|org.godotengine.editor.v4.phonepreview1.release) ;;
+              *) echo 'Unexpected application ID; refusing artifact'; exit 1 ;;
+            esac
+            "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose --print-certs "$phone_apk" > "evidence/$phone_name-signature.txt"
+            "$ANDROID_HOME/build-tools/36.1.0/zipalign" -c -P 16 4 "$phone_apk" > "evidence/$phone_name-alignment.txt"
+            python recipe/phone_editor/verify_apk.py "$phone_apk" > "evidence/$phone_name-contents.json"
+            printf '%s %s\n' "$phone_id" "$phone_name" >> evidence/APPLICATION-IDS.txt
+            cp "$phone_apk" deliverables/
+          done
+          (cd deliverables && sha256sum *.apk) > evidence/APK-SHA256.txt
+          cp evidence/APK-SHA256.txt deliverables/
+          cp recipe/phone_editor/README.md deliverables/
+      - name: Upload APK only after verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: godot-phone-preview-1-apk
+          path: deliverables/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve checks and patch even on build failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: godot-phone-preview-1-evidence
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
