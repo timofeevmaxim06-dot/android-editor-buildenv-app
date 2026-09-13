@@ -1,0 +1,2200 @@
+diff --git a/doc/classes/TextEdit.xml b/doc/classes/TextEdit.xml
+index acb122d..e895275 100644
+--- a/doc/classes/TextEdit.xml
++++ b/doc/classes/TextEdit.xml
+@@ -1399,6 +1399,9 @@
+ 			If [code]true[/code], text can be selected.
+ 			If [code]false[/code], text can not be selected by the user or by the [method select] or [method select_all] methods.
+ 		</member>
++		<member name="selection_handle_enabled" type="bool" setter="set_selection_handle_enabled" getter="is_selection_handle_enabled" default="true">
++			If [code]true[/code], enables the handles used for text selection. These handles are only visible on touchscreen and can be dragged to adjust the selected text range.
++		</member>
+ 		<member name="shortcut_keys_enabled" type="bool" setter="set_shortcut_keys_enabled" getter="is_shortcut_keys_enabled" default="true">
+ 			If [code]true[/code], shortcut keys for context menu items are enabled, even if the context menu is disabled.
+ 		</member>
+diff --git a/editor/docks/editor_dock_manager.cpp b/editor/docks/editor_dock_manager.cpp
+index 50b991a..129877e 100644
+--- a/editor/docks/editor_dock_manager.cpp
++++ b/editor/docks/editor_dock_manager.cpp
+@@ -29,6 +29,8 @@
+ /**************************************************************************/
+ 
+ #include "editor_dock_manager.h"
++#include "editor/editor_main_screen.h"
++#include "scene/gui/box_container.h"
+ 
+ #include "core/object/callable_mp.h"
+ #include "editor/docks/dock_tab_container.h"
+@@ -195,7 +197,25 @@ void EditorDockManager::_update_layout() {
+ 	EditorNode::get_singleton()->save_editor_layout_delayed();
+ }
+ 
++void EditorDockManager::setup_phone_navigation(HBoxContainer *p_navigation) {
++	phone_navigation = p_navigation;
++}
++
++void EditorDockManager::_update_phone_buttons() {
++	if (!phone_slot) {
++		return;
++	}
++	Control *active = phone_slot->get_current_tab_control();
++	for (const KeyValue<EditorDock *, Button *> &entry : phone_buttons) {
++		entry.value->set_visible(entry.key->enabled);
++		entry.value->set_text(entry.key->get_display_title());
++		entry.value->set_pressed_no_signal(phone_panels->is_visible() && active == entry.key);
++	}
++	EditorNode::get_singleton()->get_editor_main_screen()->set_phone_workspace_active(phone_workspace->is_visible());
++}
++
+ void EditorDockManager::update_docks_menu() {
++	_update_phone_buttons();
+ 	docks_menu->clear();
+ 	docks_menu->reset_size();
+ 
+@@ -324,10 +344,40 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
+ 			p_window_dump.get("window_screen_rect", Rect2i()));
+ }
+ 
++void EditorDockManager::setup_phone_layout(DockTabContainer *p_slot, Control *p_workspace, Control *p_panels) {
++	ERR_FAIL_COND(!all_docks.is_empty()); // Configure before registering docks.
++	phone_slot = p_slot;
++	phone_workspace = p_workspace;
++	phone_panels = p_panels;
++	show_phone_workspace(true);
++}
++
++void EditorDockManager::show_phone_workspace(bool p_show) {
++	if (!phone_slot) {
++		return;
++	}
++	if (!p_show) {
++		EditorNode::get_singleton()->set_distraction_free_mode(false);
++	}
++	phone_workspace->set_visible(p_show);
++	phone_panels->set_visible(!p_show);
++	_update_phone_buttons();
++}
++
++bool EditorDockManager::is_phone_panel_visible() const {
++	return phone_panels && phone_panels->is_visible();
++}
++
+ void EditorDockManager::_move_dock(EditorDock *p_dock, Control *p_target, int p_tab_index, bool p_set_current) {
+ 	ERR_FAIL_NULL(p_dock);
+ 	ERR_FAIL_COND_MSG(!all_docks.has(p_dock), vformat("Cannot move unknown dock '%s'.", p_dock->get_display_title()));
+ 
++	// Keep registration, selection, feature profiles and persistence with the
++	// native manager. Only vertical docking destinations are consolidated.
++	DockTabContainer *requested_slot = Object::cast_to<DockTabContainer>(p_target);
++	if (phone_slot && requested_slot && requested_slot->layout == EditorDock::DOCK_LAYOUT_VERTICAL) {
++		p_target = phone_slot;
++	}
+ 	Node *parent = p_dock->get_parent();
+ 	if (parent == p_target) {
+ 		if (parent && p_tab_index >= 0) {
+@@ -701,11 +751,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+ 	}
+ 
+ 	DockTabContainer *tab_container = p_dock->get_parent_container();
++	// Explicit dock navigation may reveal panels; background inspector updates
++	// must not steal the workspace while editing a scene or a script.
++	if (phone_slot && tab_container == phone_slot && p_grab_focus) {
++		show_phone_workspace(false);
++	}
+ 	if (!tab_container || !tab_container->can_switch_dock()) {
+ 		return;
+ 	}
+ 
+-	if (p_grab_focus) {
++	if (p_grab_focus && tab_container != phone_slot) {
+ 		tab_container->get_tab_bar()->grab_focus();
+ 	}
+ 
+@@ -713,6 +768,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+ 		int tab_index = tab_container->get_tab_idx_from_control(p_dock);
+ 		tab_container->set_current_tab(tab_index);
+ 	}
++	_update_phone_buttons();
+ }
+ 
+ void EditorDockManager::focus_dock(EditorDock *p_dock) {
+@@ -737,6 +793,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
+ 
+ 	p_dock->dock_slot_index = p_dock->default_slot;
+ 	all_docks.push_back(p_dock);
++	if (phone_navigation && p_dock->default_slot != EditorDock::DOCK_SLOT_NONE && dock_slots[p_dock->default_slot]->layout == EditorDock::DOCK_LAYOUT_VERTICAL) {
++		Button *button = memnew(Button);
++		button->set_name("PhoneDock" + p_dock->get_class());
++		button->set_theme_type_variation("MainScreenButton");
++		button->set_toggle_mode(true);
++		button->set_focus_mode(Control::FOCUS_NONE);
++		button->set_mouse_filter(Control::MOUSE_FILTER_PASS);
++		button->set_custom_minimum_size(Size2(0, 32 * EDSCALE));
++		button->connect(SceneStringName(pressed), callable_mp(this, &EditorDockManager::focus_dock).bind(p_dock));
++		phone_navigation->add_child(button);
++		phone_buttons.insert(p_dock, button);
++	}
+ 	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
+ 	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
+ 
+@@ -755,6 +823,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
+ 
+ 	_move_dock(p_dock, nullptr);
+ 
++	if (phone_buttons.has(p_dock)) {
++		phone_buttons[p_dock]->queue_free();
++		phone_buttons.erase(p_dock);
++	}
+ 	all_docks.erase(p_dock);
+ 	p_dock->disconnect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style));
+ 	p_dock->disconnect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style));
+diff --git a/editor/docks/editor_dock_manager.h b/editor/docks/editor_dock_manager.h
+index caf7277..3c63563 100644
+--- a/editor/docks/editor_dock_manager.h
++++ b/editor/docks/editor_dock_manager.h
+@@ -35,6 +35,7 @@
+ #include "scene/gui/split_container.h"
+ 
+ class Button;
++class HBoxContainer;
+ class ConfigFile;
+ class Control;
+ class EditorDock;
+@@ -102,6 +103,12 @@ private:
+ 
+ 	EditorDock *dock_tab_dragged = nullptr;
+ 	bool docks_visible = true;
++	DockTabContainer *phone_slot = nullptr;
++	Control *phone_workspace = nullptr;
++	Control *phone_panels = nullptr;
++	HBoxContainer *phone_navigation = nullptr;
++	HashMap<EditorDock *, Button *> phone_buttons;
++	void _update_phone_buttons();
+ 
+ 	DockContextPopup *dock_context_popup = nullptr;
+ 	PopupMenu *docks_menu = nullptr;
+@@ -129,6 +136,10 @@ private:
+ public:
+ 	static EditorDockManager *get_singleton() { return singleton; }
+ 
++	void setup_phone_layout(DockTabContainer *p_slot, Control *p_workspace, Control *p_panels);
++	void show_phone_workspace(bool p_show);
++	bool is_phone_panel_visible() const;
++	void setup_phone_navigation(HBoxContainer *p_navigation);
+ 	void update_docks_menu();
+ 	void update_tab_styles();
+ 	void set_tab_icon_max_width(int p_max_width);
+diff --git a/editor/editor_main_screen.cpp b/editor/editor_main_screen.cpp
+index 730be32..7897a9e 100644
+--- a/editor/editor_main_screen.cpp
++++ b/editor/editor_main_screen.cpp
+@@ -33,11 +33,14 @@
+ #include "core/io/config_file.h"
+ #include "core/object/callable_mp.h"
+ #include "editor/editor_node.h"
++#include "editor/docks/editor_dock_manager.h"
+ #include "editor/editor_string_names.h"
+ #include "editor/plugins/editor_plugin.h"
+ #include "editor/settings/editor_settings.h"
++#include "editor/themes/editor_scale.h"
+ #include "scene/gui/box_container.h"
+ #include "scene/gui/button.h"
++#include "scene/gui/scroll_container.h"
+ 
+ void EditorMainScreen::_notification(int p_what) {
+ 	switch (p_what) {
+@@ -103,6 +106,12 @@ void EditorMainScreen::load_layout_from_config(Ref<ConfigFile> p_config_file, co
+ 	}
+ }
+ 
++void EditorMainScreen::set_phone_workspace_active(bool p_active) {
++	for (int i = 0; i < buttons.size(); i++) {
++		buttons[i]->set_pressed_no_signal(p_active && editor_table[i] == selected_plugin);
++	}
++}
++
+ void EditorMainScreen::set_button_enabled(int p_index, bool p_enabled) {
+ 	ERR_FAIL_INDEX(p_index, buttons.size());
+ 	buttons[p_index]->set_visible(p_enabled);
+@@ -185,6 +194,13 @@ void EditorMainScreen::select(int p_index) {
+ 	EditorPlugin *new_editor = editor_table[p_index];
+ 	ERR_FAIL_NULL(new_editor);
+ 
++	EditorDockManager::get_singleton()->show_phone_workspace(true);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		ScrollContainer *navigation = Object::cast_to<ScrollContainer>(button_hb->get_parent()->get_parent());
++		if (navigation) {
++			navigation->call_deferred("ensure_control_visible", buttons[p_index]);
++		}
++	}
+ 	if (selected_plugin == new_editor) {
+ 		return;
+ 	}
+@@ -194,6 +210,7 @@ void EditorMainScreen::select(int p_index) {
+ 	}
+ 
+ 	selected_plugin = new_editor;
++	set_phone_workspace_active(true);
+ 	selected_plugin->make_visible(true);
+ 	selected_plugin->selected_notify();
+ 	set_accessibility_name(selected_plugin->get_plugin_name());
+@@ -237,6 +254,10 @@ EditorPlugin *EditorMainScreen::get_plugin_by_name(const String &p_plugin_name)
+ }
+ 
+ bool EditorMainScreen::can_auto_switch_screens() const {
++	// Selecting objects in the Scene/Inspector view must keep that view open.
++	if (EditorDockManager::get_singleton()->is_phone_panel_visible()) {
++		return false;
++	}
+ 	if (selected_plugin == nullptr) {
+ 		return true;
+ 	}
+@@ -265,6 +286,11 @@ void EditorMainScreen::add_main_plugin(EditorPlugin *p_editor) {
+ 	tb->set_theme_type_variation("MainScreenButton");
+ 	tb->set_name(p_editor->get_plugin_name());
+ 	tb->set_text(p_editor->get_plugin_name());
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		tb->set_focus_mode(Control::FOCUS_NONE);
++		tb->set_mouse_filter(Control::MOUSE_FILTER_PASS);
++		tb->set_custom_minimum_size(Size2(0, 32 * EDSCALE));
++	}
+ 
+ 	Ref<Shortcut> shortcut = EditorSettings::get_singleton()->get_shortcut("editor/editor_" + p_editor->get_plugin_name().to_lower());
+ 	if (shortcut.is_valid()) {
+@@ -282,6 +308,7 @@ void EditorMainScreen::add_main_plugin(EditorPlugin *p_editor) {
+ 	}
+ 
+ 	tb->connect(SceneStringName(pressed), callable_mp(this, &EditorMainScreen::select).bind(buttons.size()));
++	tb->connect(SceneStringName(pressed), callable_mp(EditorDockManager::get_singleton(), &EditorDockManager::show_phone_workspace).bind(true));
+ 
+ 	buttons.push_back(tb);
+ 	button_hb->add_child(tb);
+diff --git a/editor/editor_main_screen.h b/editor/editor_main_screen.h
+index 78ec499..db38de4 100644
+--- a/editor/editor_main_screen.h
++++ b/editor/editor_main_screen.h
+@@ -70,6 +70,7 @@ public:
+ 	void save_layout_to_config(Ref<ConfigFile> p_config_file, const String &p_section) const;
+ 	void load_layout_from_config(Ref<ConfigFile> p_config_file, const String &p_section);
+ 
++	void set_phone_workspace_active(bool p_active);
+ 	void set_button_enabled(int p_index, bool p_enabled);
+ 	bool is_button_enabled(int p_index) const;
+ 
+diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
+index 5bc4649..74d2be8 100644
+--- a/editor/editor_node.cpp
++++ b/editor/editor_node.cpp
+@@ -30,6 +30,9 @@
+ 
+ #include "editor_node.h"
+ 
++#include "scene/gui/flow_container.h"
++#include "scene/gui/scroll_container.h"
++
+ #include "core/config/engine.h"
+ #include "core/config/project_settings.h"
+ #include "core/extension/gdextension_manager.h"
+@@ -201,9 +204,7 @@
+ #include "servers/physics_3d/physics_server_3d.h"
+ #endif // PHYSICS_3D_DISABLED
+ 
+-#ifdef ANDROID_ENABLED
+ #include "editor/gui/touch_actions_panel.h"
+-#endif // ANDROID_ENABLED
+ 
+ #include "modules/modules_enabled.gen.h" // For gdscript, mono.
+ 
+@@ -8292,7 +8293,6 @@ void EditorNode::_bottom_panel_resized() {
+ 	bottom_panel->set_bottom_panel_offset(center_split->get_split_offset());
+ }
+ 
+-#ifdef ANDROID_ENABLED
+ void EditorNode::_touch_actions_panel_mode_changed() {
+ 	int panel_mode = EDITOR_GET("interface/touchscreen/touch_actions_panel");
+ 	switch (panel_mode) {
+@@ -8318,7 +8318,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
+ 			break;
+ 	}
+ }
+-#endif
+ 
+ #ifdef MACOS_ENABLED
+ extern "C" GameViewPluginBase *get_game_view_plugin();
+@@ -8479,7 +8478,9 @@ EditorNode::EditorNode() {
+ 	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
+ 	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
+ 	if (w) {
+-		const Size2 minimum_size = Size2(1024, 600) * EDSCALE;
++		// A desktop-sized forced window is larger than a phone's drawable area.
++		const bool phone_mode = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
++		const Size2 minimum_size = phone_mode ? Size2(360, 240) : Size2(1024, 600) * EDSCALE;
+ 		w->set_min_size(minimum_size); // Calling it this early doesn't sync the property with DS.
+ 		DisplayServer::get_singleton()->window_set_min_size(minimum_size);
+ 	}
+@@ -8672,12 +8673,28 @@ EditorNode::EditorNode() {
+ 
+ 	main_vbox = memnew(VBoxContainer);
+ 
++
+ #ifdef ANDROID_ENABLED
++	const bool use_phone_chrome = true;
++#else
++	const bool use_phone_chrome = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
++#endif
++	if (use_phone_chrome) {
+ 	base_vbox = memnew(VBoxContainer);
+ 	base_vbox->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT, Control::PRESET_MODE_MINSIZE, theme->get_constant(SNAME("window_border_margin"), EditorStringName(Editor)));
+ 
+ 	title_bar = memnew(EditorTitleBar);
+-	base_vbox->add_child(title_bar);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") && !OS::get_singleton()->has_feature("xr_editor")) {
++		ScrollContainer *phone_top_scroll = memnew(ScrollContainer);
++		phone_top_scroll->set_name("PhoneTopBarScroll");
++		phone_top_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		phone_top_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		base_vbox->add_child(phone_top_scroll);
++		phone_top_scroll->add_child(title_bar);
++	} else {
++		base_vbox->add_child(title_bar);
++	}
+ 
+ 	main_hbox = memnew(HBoxContainer);
+ 	main_hbox->add_child(main_vbox);
+@@ -8688,12 +8705,25 @@ EditorNode::EditorNode() {
+ 	_touch_actions_panel_mode_changed();
+ 
+ 	gui_base->add_child(base_vbox);
+-#else
++	} else {
+ 	gui_base->add_child(main_vbox);
+ 
++
+ 	title_bar = memnew(EditorTitleBar);
+-	main_vbox->add_child(title_bar);
+-#endif
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		// Exercise the same scrollable phone chrome in the desktop runtime test.
++		ScrollContainer *phone_top_scroll = memnew(ScrollContainer);
++		phone_top_scroll->set_name("PhoneTopBarScroll");
++		phone_top_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		phone_top_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		main_vbox->add_child(phone_top_scroll);
++		phone_top_scroll->add_child(title_bar);
++	} else {
++		main_vbox->add_child(title_bar);
++	}
++
++	}
+ 
+ 	DockSplitContainer *main_vsplit = memnew(DockSplitContainer);
+ 	main_vsplit->set_name("DockVSplitMain");
+@@ -8711,6 +8741,7 @@ EditorNode::EditorNode() {
+ 	left_l_vsplit->set_vertical(true);
+ 	main_hsplit->add_child(left_l_vsplit);
+ 
++	HBoxContainer *phone_navigation = nullptr;
+ 	LocalVector<DockTabContainer *> dock_slots;
+ 	{
+ 		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
+@@ -8864,6 +8895,49 @@ EditorNode::EditorNode() {
+ 	srt->add_child(editor_main_screen);
+ 	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
+ 
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		// Reuse a registered native slot in the center. Empty side slots collapse
++		// naturally, including after restoring a saved desktop dock layout.
++		// The split auto-shows itself when its children change visibility, so
++		// switch a plain wrapper rather than hiding the split directly.
++		VBoxContainer *phone_workspace = memnew(VBoxContainer);
++		phone_workspace->set_name("PhoneWorkspace");
++		phone_workspace->set_v_size_flags(Control::SIZE_EXPAND_FILL);
++		phone_workspace->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++		center_vb->remove_child(center_split);
++		center_vb->add_child(phone_workspace);
++		phone_workspace->add_child(center_split);
++		VBoxContainer *phone_panels = memnew(VBoxContainer);
++		phone_panels->set_name("PhonePanels");
++		phone_panels->set_v_size_flags(Control::SIZE_EXPAND_FILL);
++		phone_panels->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++		center_vb->add_child(phone_panels);
++		for (DockTabContainer *slot : dock_slots) {
++			if (slot->dock_slot == EditorDock::DOCK_SLOT_RIGHT_UL) {
++				slot->get_parent()->remove_child(slot);
++				phone_panels->add_child(slot);
++				slot->set_custom_minimum_size(Size2());
++				slot->set_use_hidden_tabs_for_min_size(false);
++				slot->set_tabs_visible(false);
++				editor_dock_manager->setup_phone_layout(slot, phone_workspace, phone_panels);
++				break;
++			}
++		}
++		ScrollContainer *navigation_scroll = memnew(ScrollContainer);
++		navigation_scroll->set_name("PhoneNavigation");
++		navigation_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		navigation_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		navigation_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++		center_vb->add_child(navigation_scroll);
++		center_vb->move_child(navigation_scroll, 0);
++		phone_navigation = memnew(HBoxContainer);
++		phone_navigation->set_name("PhoneNavigationRow");
++		phone_navigation->set_mouse_filter(Control::MOUSE_FILTER_PASS);
++		navigation_scroll->add_child(phone_navigation);
++		editor_dock_manager->setup_phone_navigation(phone_navigation);
++	}
++
++
+ 	scene_root = memnew(SubViewport);
+ 	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
+ 	scene_root->set_translation_domain(StringName());
+@@ -9076,8 +9150,13 @@ EditorNode::EditorNode() {
+ 	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
+ 	main_editor_button_hb->set_name("EditorMainScreenButtons");
+ 	editor_main_screen->set_button_container(main_editor_button_hb);
+-	title_bar->add_child(main_editor_button_hb);
+-	title_bar->set_center_control(main_editor_button_hb);
++	if (phone_navigation) {
++		main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_PASS);
++		phone_navigation->add_child(main_editor_button_hb);
++	} else {
++		title_bar->add_child(main_editor_button_hb);
++		title_bar->set_center_control(main_editor_button_hb);
++	}
+ 
+ 	// Spacer to center 2D / 3D / Script buttons.
+ 	right_spacer = memnew(Control);
+@@ -9190,6 +9269,7 @@ EditorNode::EditorNode() {
+ 	history_dock = memnew(HistoryDock);
+ 	editor_dock_manager->add_dock(history_dock);
+ 
++
+ 	// Add some offsets to make LEFT_R and RIGHT_L docks wider than minsize.
+ 	const int dock_hsize = 280;
+ 	// By default there is only 3 visible, so set 2 split offsets for them.
+diff --git a/editor/editor_node.h b/editor/editor_node.h
+index f683e13..be4e03d 100644
+--- a/editor/editor_node.h
++++ b/editor/editor_node.h
+@@ -104,9 +104,7 @@ class ProjectSettingsEditor;
+ class SceneImportSettingsDialog;
+ class ProjectUpgradeTool;
+ 
+-#ifdef ANDROID_ENABLED
+ class TouchActionsPanel;
+-#endif
+ 
+ struct EditorProgress {
+ 	String task;
+@@ -291,12 +289,10 @@ private:
+ 	VBoxContainer *main_vbox = nullptr;
+ 	OptionButton *renderer = nullptr;
+ 
+-#ifdef ANDROID_ENABLED
+ 	VBoxContainer *base_vbox = nullptr; // It only contains the title_bar and main_hbox.
+ 	HBoxContainer *main_hbox = nullptr; // It only contains the touch_actions_panel and main_vbox.
+ 	TouchActionsPanel *touch_actions_panel = nullptr;
+ 	void _touch_actions_panel_mode_changed();
+-#endif
+ 
+ 	ConfirmationDialog *video_restart_dialog = nullptr;
+ 
+diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
+index aceecca..e443cf3 100644
+--- a/editor/gui/code_editor.cpp
++++ b/editor/gui/code_editor.cpp
+@@ -29,6 +29,8 @@
+ /**************************************************************************/
+ 
+ #include "code_editor.h"
++#include "editor/script/script_editor_plugin.h"
++#include "servers/display/display_server.h"
+ 
+ #include "core/input/input.h"
+ #include "core/object/callable_mp.h"
+@@ -47,6 +49,7 @@
+ #include "scene/gui/menu_button.h"
+ #include "scene/gui/rich_text_label.h"
+ #include "scene/gui/separator.h"
++#include "scene/gui/scroll_container.h"
+ #include "scene/main/timer.h"
+ #include "scene/resources/font.h"
+ 
+@@ -1729,7 +1732,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
+ void CodeTextEditor::_toggle_files_pressed() {
+ 	ERR_FAIL_NULL(toggle_files_list);
+ 	toggle_files_list->set_visible(!toggle_files_list->is_visible());
+-	EditorSettings::get_singleton()->set_project_metadata("files_panel", "show_files_panel", toggle_files_list->is_visible());
++	EditorSettings::get_singleton()->set_project_metadata("files_panel", (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? "show_phone_files_panel" : "show_files_panel", toggle_files_list->is_visible());
+ 	update_toggle_files_button();
+ }
+ 
+@@ -1885,7 +1888,7 @@ void CodeTextEditor::_zoom_out() {
+ }
+ 
+ void CodeTextEditor::_zoom_to(float p_zoom_factor) {
+-	if (zoom_factor == p_zoom_factor) {
++	if (Math::is_equal_approx(zoom_factor, p_zoom_factor)) {
+ 		return;
+ 	}
+ 
+@@ -1946,6 +1949,105 @@ void CodeTextEditor::update_toggle_files_button() {
+ 	toggle_files_button->set_tooltip_text(vformat("%s (%s)", TTR("Toggle Files Panel"), ED_GET_SHORTCUT("script_editor/toggle_files_panel")->get_as_text()));
+ }
+ 
++
++Button *CodeTextEditor::_phone_add_action(HBoxContainer *p_row, const String &p_name, const String &p_label, int p_action) {
++	Button *button = memnew(Button);
++	button->set_name(p_name);
++	button->set_text(p_label);
++	button->set_focus_mode(FOCUS_NONE); // Keep selection and the Android IME on the code.
++	button->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++	if (p_action >= 0) {
++		button->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_phone_text_action).bind(p_action));
++	}
++	p_row->add_child(button);
++	return button;
++}
++
++void CodeTextEditor::_phone_scroll_toggled(bool p_enabled) {
++	phone_scroll_surface->set_visible(p_enabled);
++	phone_scroll_button->set_text(p_enabled ? String::utf8("Править") : String::utf8("Листать"));
++}
++
++void CodeTextEditor::_phone_scroll_input(const Ref<InputEvent> &p_event) {
++	// Explicit reading mode: dragging cannot move the caret or change selection.
++	Vector2 pixels;
++	Ref<InputEventScreenDrag> touch_drag = p_event;
++	Ref<InputEventMouseMotion> motion = p_event;
++	Ref<InputEventMouseButton> button = p_event;
++	Ref<InputEventPanGesture> pan = p_event;
++	if (touch_drag.is_valid()) {
++		pixels = -touch_drag->get_relative();
++	} else if (motion.is_valid() && motion->get_device() != InputEvent::DEVICE_ID_EMULATION && motion->get_button_mask().has_flag(MouseButtonMask::LEFT)) {
++		pixels = -motion->get_relative();
++	} else if (pan.is_valid()) {
++		pixels = pan->get_delta();
++#ifdef ANDROID_ENABLED
++		pixels *= 5.0;
++#endif
++	} else if (button.is_valid() && button->is_pressed()) {
++		if (button->get_button_index() == MouseButton::WHEEL_DOWN) {
++			pixels.y = text_editor->get_line_height() * 3;
++		} else if (button->get_button_index() == MouseButton::WHEEL_UP) {
++			pixels.y = -text_editor->get_line_height() * 3;
++		}
++	}
++	const real_t sensitivity = (int)EDITOR_GET("interface/touchscreen/phone_text_pan_percent") / 100.0;
++	text_editor->set_v_scroll(text_editor->get_v_scroll() + pixels.y * sensitivity / MAX(1, text_editor->get_line_height()));
++	text_editor->set_h_scroll(text_editor->get_h_scroll() + pixels.x * sensitivity);
++	phone_scroll_surface->accept_event();
++}
++
++void CodeTextEditor::_phone_text_action(int p_action) {
++	phone_scroll_button->set_pressed(false);
++	text_editor->grab_focus();
++	text_editor->apply_ime();
++	switch (p_action) {
++		case 0: text_editor->paste(); break;
++		case 1: text_editor->copy(); break;
++		case 2: text_editor->cut(); break;
++		case 3: text_editor->undo(); break;
++		case 4: text_editor->redo(); break;
++		case 5: {
++			text_editor->remove_secondary_carets();
++			const int line = text_editor->get_caret_line();
++			text_editor->select(line, 0, line, text_editor->get_line(line).length());
++		} break;
++		case 6: text_editor->select_all(); break;
++		case 7: {
++			text_editor->set_virtual_keyboard_show_on_focus(true);
++			text_editor->release_focus();
++			text_editor->grab_focus();
++			text_editor->set_virtual_keyboard_show_on_focus(false);
++		} break;
++		case 8: _show_goto_popup_request(); break;
++		case 9: {
++#ifdef ANDROID_ENABLED
++			DisplayServer::get_singleton()->virtual_keyboard_hide();
++#endif
++			ScriptEditor::get_singleton()->toggle_phone_chrome();
++		} break;
++		case 16: {
++#ifdef ANDROID_ENABLED
++			DisplayServer::get_singleton()->virtual_keyboard_hide();
++#endif
++			_toggle_files_pressed();
++		} break;
++		default: {
++			const Key keys[] = { Key::LEFT, Key::RIGHT, Key::UP, Key::DOWN, Key::HOME, Key::END };
++			ERR_FAIL_INDEX(p_action - 10, 6);
++			Ref<InputEventKey> key;
++			key.instantiate();
++			key->set_keycode(keys[p_action - 10]);
++			key->set_pressed(true);
++			key->set_shift_pressed(phone_select_button->is_pressed());
++			text_editor->gui_input(key);
++		} break;
++	}
++	if (p_action != 7 && p_action != 8 && p_action != 9 && p_action != 16) {
++		text_editor->refresh_virtual_keyboard();
++	}
++}
++
+ CodeTextEditor::CodeTextEditor() {
+ 	code_complete_func = nullptr;
+ 	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
+@@ -1963,7 +2065,53 @@ CodeTextEditor::CodeTextEditor() {
+ 	text_editor->set_draw_line_numbers(true);
+ 	text_editor->set_highlight_matching_braces_enabled(true);
+ 	text_editor->set_auto_indent_enabled(true);
++
+ 	text_editor->set_deselect_on_focus_loss_enabled(false);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		ScrollContainer *tools = memnew(ScrollContainer);
++		tools->set_name("PhoneCodeTools");
++		tools->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		tools->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		tools->set_h_size_flags(SIZE_EXPAND_FILL);
++		add_child(tools);
++		move_child(tools, 0);
++		HBoxContainer *row = memnew(HBoxContainer);
++		tools->add_child(row);
++		// Compact script mode keeps code usable at 200%; Panels restores navigation.
++		_phone_add_action(row, "PhonePanels", String::utf8("Панели"), 9);
++		_phone_add_action(row, "PhonePaste", String::utf8("Вставить"), 0);
++		_phone_add_action(row, "PhoneUndo", String::utf8("Отмена"), 3);
++		_phone_add_action(row, "PhoneSelectLine", String::utf8("Строка"), 5);
++		_phone_add_action(row, "PhoneCopy", String::utf8("Копировать"), 1);
++		_phone_add_action(row, "PhoneLeft", String::utf8("←"), 10);
++		_phone_add_action(row, "PhoneRight", String::utf8("→"), 11);
++		phone_select_button = _phone_add_action(row, "PhoneExtendSelection", String::utf8("Выделять"), -1);
++		phone_select_button->set_toggle_mode(true);
++		phone_select_button->set_tooltip_text(String::utf8("Включите и нажимайте стрелки, чтобы точно выделить текст."));
++		phone_scroll_button = _phone_add_action(row, "PhoneScrollMode", String::utf8("Листать"), -1);
++		phone_scroll_button->set_toggle_mode(true);
++		phone_scroll_button->set_tooltip_text(String::utf8("Прокрутка одним пальцем без перемещения курсора. Нажмите «Править», чтобы вернуться к вводу."));
++		phone_scroll_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_scroll_toggled));
++		_phone_add_action(row, "PhoneKeyboard", String::utf8("Клавиатура"), 7);
++		_phone_add_action(row, "PhoneUp", String::utf8("↑"), 12);
++		_phone_add_action(row, "PhoneDown", String::utf8("↓"), 13);
++		_phone_add_action(row, "PhoneHome", String::utf8("Начало"), 14);
++		_phone_add_action(row, "PhoneEnd", String::utf8("Конец"), 15);
++		_phone_add_action(row, "PhoneCut", String::utf8("Вырезать"), 2);
++		_phone_add_action(row, "PhoneRedo", String::utf8("Повтор"), 4);
++		_phone_add_action(row, "PhoneSelectAll", String::utf8("Всё"), 6);
++		_phone_add_action(row, "PhoneGoToLine", String::utf8("К строке"), 8);
++		_phone_add_action(row, "PhoneScripts", String::utf8("Скрипты"), 16);
++		phone_scroll_surface = memnew(Control);
++		phone_scroll_surface->set_name("PhoneCodeScrollSurface");
++		text_editor->add_child(phone_scroll_surface);
++		phone_scroll_surface->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
++		phone_scroll_surface->set_mouse_filter(MOUSE_FILTER_STOP);
++		phone_scroll_surface->set_focus_mode(FOCUS_NONE);
++		phone_scroll_surface->hide();
++		phone_scroll_surface->connect(SceneStringName(gui_input), callable_mp(this, &CodeTextEditor::_phone_scroll_input));
++	}
++
+ 
+ 	status_bar = memnew(HBoxContainer);
+ 	add_child(status_bar);
+diff --git a/editor/gui/code_editor.h b/editor/gui/code_editor.h
+index d624099..9988a32 100644
+--- a/editor/gui/code_editor.h
++++ b/editor/gui/code_editor.h
+@@ -161,7 +161,16 @@ class CodeTextEditor : public VBoxContainer {
+ 	GDCLASS(CodeTextEditor, VBoxContainer);
+ 
+ 	CodeEdit *text_editor = nullptr;
++
+ 	FindReplaceBar *find_replace_bar = nullptr;
++	Control *phone_scroll_surface = nullptr;
++	Button *phone_scroll_button = nullptr;
++	Button *phone_select_button = nullptr;
++	void _phone_text_action(int p_action);
++	void _phone_scroll_toggled(bool p_enabled);
++	void _phone_scroll_input(const Ref<InputEvent> &p_event);
++	Button *_phone_add_action(HBoxContainer *p_row, const String &p_name, const String &p_label, int p_action);
++
+ 	HBoxContainer *status_bar = nullptr;
+ 
+ 	Button *toggle_files_button = nullptr;
+diff --git a/editor/gui/create_dialog.cpp b/editor/gui/create_dialog.cpp
+index 844fe17..a234bdc 100644
+--- a/editor/gui/create_dialog.cpp
++++ b/editor/gui/create_dialog.cpp
+@@ -29,6 +29,7 @@
+ /**************************************************************************/
+ 
+ #include "create_dialog.h"
++#include "scene/gui/tab_container.h"
+ 
+ #include "core/io/resource_loader.h"
+ #include "core/object/callable_mp.h"
+@@ -83,7 +84,7 @@ void CreateDialog::popup_create(bool p_dont_clear, bool p_replace_mode, const St
+ 
+ 	// Restore valid window bounds or pop up at default size.
+ 	Rect2 saved_size = EditorSettings::get_singleton()->get_project_metadata("dialog_bounds", "create_new_node", Rect2());
+-	if (saved_size != Rect2()) {
++	if (saved_size != Rect2() && !(bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
+ 		popup(saved_size);
+ 	} else {
+ 		popup_centered_clamped(Size2(900, 700) * EDSCALE, 0.8);
+@@ -1098,6 +1099,29 @@ CreateDialog::CreateDialog() {
+ 
+ 	vsc_right->add_child(vbc_desc);
+ 
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		// The three columns become individual views, preserving their native signals.
++		TabContainer *phone_tabs = memnew(TabContainer);
++		phone_tabs->set_name("PhoneCreateTabs");
++		phone_tabs->set_use_hidden_tabs_for_min_size(false);
++		hsc->remove_child(vsc_right);
++		vsc->remove_child(fav_vb);
++		vsc->remove_child(rec_vb);
++		remove_child(hsc);
++		memdelete(hsc);
++		add_child(phone_tabs);
++		phone_tabs->add_child(vsc_right);
++		phone_tabs->add_child(fav_vb);
++		phone_tabs->add_child(rec_vb);
++		phone_tabs->set_tab_title(0, TTR("Search"));
++		phone_tabs->set_tab_title(1, TTR("Favorites"));
++		phone_tabs->set_tab_title(2, TTR("Recent"));
++		vbc->set_custom_minimum_size(Size2(200, 0) * EDSCALE);
++		vbc_desc->set_custom_minimum_size(Size2(200, 0) * EDSCALE);
++		fav_vb->set_custom_minimum_size(Size2(0, 80) * EDSCALE);
++		rec_vb->set_custom_minimum_size(Size2(0, 80) * EDSCALE);
++	}
++
+ 	register_text_enter(search_box);
+ 	set_hide_on_ok(false);
+ 	set_clamp_to_embedder(true);
+diff --git a/editor/gui/touch_actions_panel.cpp b/editor/gui/touch_actions_panel.cpp
+index a2017eb..e5b48fe 100644
+--- a/editor/gui/touch_actions_panel.cpp
++++ b/editor/gui/touch_actions_panel.cpp
+@@ -37,6 +37,7 @@
+ #include "scene/gui/button.h"
+ #include "scene/gui/color_rect.h"
+ #include "scene/gui/texture_rect.h"
++#include "scene/gui/scroll_container.h"
+ #include "scene/resources/style_box_flat.h"
+ #include "servers/display/display_server.h"
+ 
+@@ -247,7 +248,18 @@ TouchActionsPanel::TouchActionsPanel() {
+ 	} else {
+ 		box->set_vertical(true);
+ 	}
+-	add_child(box);
++
++	if (!is_floating && (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		ScrollContainer *scroll = memnew(ScrollContainer);
++		scroll->set_name("PhoneTouchActionsScroll");
++		scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		add_child(scroll);
++		scroll->add_child(box);
++	} else {
++		add_child(box);
++	}
++
+ 
+ 	if (is_floating) {
+ 		drag_handle = memnew(TextureRect);
+diff --git a/editor/scene/3d/node_3d_editor_plugin.cpp b/editor/scene/3d/node_3d_editor_plugin.cpp
+index 2cdd50b..f560cf2 100644
+--- a/editor/scene/3d/node_3d_editor_plugin.cpp
++++ b/editor/scene/3d/node_3d_editor_plugin.cpp
+@@ -10489,7 +10489,13 @@ Node3DEditor::Node3DEditor() {
+ 	toolbar_margin->add_child(main_flow);
+ 
+ 	// Main toolbars.
+-	HBoxContainer *main_menu_hbox = memnew(HBoxContainer);
++	Container *main_menu_hbox = nullptr;
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		main_menu_hbox = memnew(HFlowContainer);
++		main_menu_hbox->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++	} else {
++		main_menu_hbox = memnew(HBoxContainer);
++	}
+ 	main_flow->add_child(main_menu_hbox);
+ 
+ 	String sct;
+diff --git a/editor/scene/canvas_item_editor_plugin.cpp b/editor/scene/canvas_item_editor_plugin.cpp
+index c939e3a..ab41ca5 100644
+--- a/editor/scene/canvas_item_editor_plugin.cpp
++++ b/editor/scene/canvas_item_editor_plugin.cpp
+@@ -5637,7 +5637,13 @@ CanvasItemEditor::CanvasItemEditor() {
+ 	toolbar_margin->add_child(main_flow);
+ 
+ 	// Main toolbars.
+-	HBoxContainer *main_menu_hbox = memnew(HBoxContainer);
++	Container *main_menu_hbox = nullptr;
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		main_menu_hbox = memnew(HFlowContainer);
++		main_menu_hbox->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++	} else {
++		main_menu_hbox = memnew(HBoxContainer);
++	}
+ 	main_menu_hbox->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
+ 	main_flow->add_child(main_menu_hbox);
+ 
+diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
+index 0e60dde..6b686aa 100644
+--- a/editor/script/script_editor_plugin.cpp
++++ b/editor/script/script_editor_plugin.cpp
+@@ -75,6 +75,7 @@
+ #include "editor/themes/editor_scale.h"
+ #include "editor/themes/editor_theme_manager.h"
+ #include "scene/gui/separator.h"
++#include "scene/gui/scroll_container.h"
+ #include "scene/gui/tab_container.h"
+ #include "scene/gui/texture_rect.h"
+ #include "scene/main/node.h"
+@@ -996,9 +997,53 @@ TypedArray<Script> ScriptEditor::_get_open_scripts() const {
+ 	return ret;
+ }
+ 
++
++void ScriptEditor::toggle_phone_chrome() {
++	phone_compact = !phone_compact;
++	update_phone_chrome();
++}
++
++void ScriptEditor::update_phone_chrome() {
++	if (!is_inside_tree() || !(bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		return;
++	}
++	bool keyboard_visible = false;
++#ifdef ANDROID_ENABLED
++	keyboard_visible = is_visible_in_tree() && DisplayServer::get_singleton()->virtual_keyboard_get_height() > 0;
++#endif
++	// Help tabs have no code toolbar, so they must retain the normal navigation.
++	const bool compact = is_visible_in_tree() && Object::cast_to<TextEditorBase>(_get_current_editor()) && (phone_compact || keyboard_visible);
++	if (compact) {
++		Control *base = EditorNode::get_singleton()->get_gui_base();
++		Control *chrome[] = {
++			Object::cast_to<Control>(base->find_child("PhoneTopBarScroll", true, false)),
++			EditorSceneTabs::get_singleton(),
++		};
++		for (Control *control : chrome) {
++			if (control) {
++				const ObjectID id = control->get_instance_id();
++				if (!phone_hidden_chrome.has(id)) {
++					phone_hidden_chrome.insert(id, control->is_visible());
++				}
++				control->hide();
++			}
++		}
++	} else {
++		for (const KeyValue<ObjectID, bool> &entry : phone_hidden_chrome) {
++			if (Control *control = Object::cast_to<Control>(ObjectDB::get_instance(entry.key))) {
++				control->set_visible(entry.value);
++			}
++		}
++		phone_hidden_chrome.clear();
++	}
++	if (phone_menu_scroll) {
++		phone_menu_scroll->set_visible(!compact);
++	}
++}
++
+ bool ScriptEditor::toggle_files_panel() {
+ 	list_split->set_visible(!list_split->is_visible());
+-	EditorSettings::get_singleton()->set_project_metadata("files_panel", "show_files_panel", list_split->is_visible());
++	EditorSettings::get_singleton()->set_project_metadata("files_panel", (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? "show_phone_files_panel" : "show_files_panel", list_split->is_visible());
+ 	return list_split->is_visible();
+ }
+ 
+@@ -1424,6 +1469,7 @@ void ScriptEditor::_file_menu_closed() {
+ }
+ 
+ void ScriptEditor::_tab_changed(int p_which) {
++	callable_mp(this, &ScriptEditor::update_phone_chrome).call_deferred();
+ 	ensure_select_current();
+ }
+ 
+@@ -1515,11 +1561,15 @@ void ScriptEditor::_notification(int p_what) {
+ #endif
+ 		} break;
+ 
+-#ifdef ANDROID_ENABLED
++
+ 		case NOTIFICATION_VISIBILITY_CHANGED: {
++			update_phone_chrome();
++#ifdef ANDROID_ENABLED
+ 			set_process(is_visible_in_tree());
++#endif
+ 		} break;
+ 
++#ifdef ANDROID_ENABLED
+ 		case NOTIFICATION_PROCESS: {
+ 			const int kb_height = DisplayServer::get_singleton()->virtual_keyboard_get_height();
+ 			if (kb_height == last_kb_height) {
+@@ -1553,8 +1603,14 @@ void ScriptEditor::_notification(int p_what) {
+ 			}
+ 
+ 			virtual_keyboard_spacer->set_custom_minimum_size(Size2(0, spacer_height));
+-			EditorSceneTabs::get_singleton()->set_visible(!kb_height);
+-			menu_hb->set_visible(!kb_visible);
++
++			if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++				update_phone_chrome();
++			} else {
++				EditorSceneTabs::get_singleton()->set_visible(!kb_height);
++				menu_hb->set_visible(!kb_visible);
++			}
++
+ 		} break;
+ #endif
+ 		case NOTIFICATION_APPLICATION_FOCUS_IN: {
+@@ -3824,8 +3880,20 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	VBoxContainer *main_container = memnew(VBoxContainer);
+ 	add_child(main_container);
+ 
++
+ 	menu_hb = memnew(HBoxContainer);
+-	main_container->add_child(menu_hb);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		ScrollContainer *scroll = memnew(ScrollContainer);
++		scroll->set_name("PhoneScriptMenuScroll");
++		scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		main_container->add_child(scroll);
++		scroll->add_child(menu_hb);
++		phone_menu_scroll = scroll;
++	} else {
++		main_container->add_child(menu_hb);
++	}
++
+ 
+ 	script_split = memnew(HSplitContainer);
+ 	main_container->add_child(script_split);
+@@ -3857,7 +3925,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	_sort_list_on_update = true;
+ 	script_list = memnew(ItemList);
+ 	script_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
+-	script_list->set_custom_minimum_size(Size2(100, 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
++	script_list->set_custom_minimum_size(Size2(100, (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? 24 : 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
+ 	script_list->set_v_size_flags(SIZE_EXPAND_FILL);
+ 	script_list->set_theme_type_variation("ItemListSecondary");
+ 	script_split->set_split_offset(200 * EDSCALE);
+@@ -3875,7 +3943,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	overview_vbox->set_v_size_flags(SIZE_EXPAND_FILL);
+ 
+ 	list_split->add_child(overview_vbox);
+-	list_split->set_visible(EditorSettings::get_singleton()->get_project_metadata("files_panel", "show_files_panel", true));
++
++	list_split->set_name("PhoneScriptList");
++	const bool phone_mode = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
++	list_split->set_visible(EditorSettings::get_singleton()->get_project_metadata("files_panel", phone_mode ? "show_phone_files_panel" : "show_files_panel", !phone_mode));
++
+ 	buttons_hbox = memnew(HBoxContainer);
+ 	overview_vbox->add_child(buttons_hbox);
+ 
+@@ -3901,7 +3973,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	overview_vbox->add_child(members_overview);
+ 
+ 	members_overview->set_allow_reselect(true);
+-	members_overview->set_custom_minimum_size(Size2(0, 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
++	members_overview->set_custom_minimum_size(Size2(0, (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? 24 : 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
+ 	members_overview->set_v_size_flags(SIZE_EXPAND_FILL);
+ 	members_overview->set_allow_rmb_select(true);
+ 
+@@ -3910,7 +3982,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	help_overview->set_theme_type_variation("ItemListSecondary");
+ 	overview_vbox->add_child(help_overview);
+ 	help_overview->set_allow_reselect(true);
+-	help_overview->set_custom_minimum_size(Size2(0, 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
++	help_overview->set_custom_minimum_size(Size2(0, (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? 24 : 60) * EDSCALE); //need to give a bit of limit to avoid it from disappearing
+ 	help_overview->set_v_size_flags(SIZE_EXPAND_FILL);
+ 
+ 	VBoxContainer *code_editor_container = memnew(VBoxContainer);
+diff --git a/editor/script/script_editor_plugin.h b/editor/script/script_editor_plugin.h
+index 067c3fb..4c50b3c 100644
+--- a/editor/script/script_editor_plugin.h
++++ b/editor/script/script_editor_plugin.h
+@@ -239,7 +239,12 @@ class ScriptEditor : public PanelContainer {
+ 	Tree *disk_changed_list = nullptr;
+ 	ConfirmationDialog *disk_changed = nullptr;
+ 
++
+ 	bool restoring_layout;
++	bool phone_compact = true;
++	Control *phone_menu_scroll = nullptr;
++	HashMap<ObjectID, bool> phone_hidden_chrome;
++	void update_phone_chrome();
+ 
+ 	void _resave_scripts(const String &p_str);
+ 
+@@ -401,6 +406,7 @@ protected:
+ public:
+ 	static ScriptEditor *get_singleton() { return script_editor; }
+ 
++	void toggle_phone_chrome();
+ 	bool toggle_files_panel();
+ 	bool is_files_panel_toggled();
+ 	void apply_scripts() const;
+diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
+index 8dc98d6..6a49ff5 100644
+--- a/editor/settings/editor_settings.cpp
++++ b/editor/settings/editor_settings.cpp
+@@ -640,6 +640,12 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
+ 	String touch_actions_panel_hints = "Disabled:0,Embedded Panel:1,Floating Panel:2";
+ 	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "interface/touchscreen/touch_actions_panel", 1, touch_actions_panel_hints)
+ 
++	// Phone layout is also selectable on desktop for geometry regression checks.
++	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_single_panel_mode", is_android_editor, "")
++	set_restart_if_changed("interface/touchscreen/phone_single_panel_mode", true);
++	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_RANGE, "interface/touchscreen/phone_text_pan_percent", 100, "25,200,5")
++	set_restart_if_changed("interface/touchscreen/phone_text_pan_percent", true);
++
+ 	// Scene tabs
+ 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
+ 	_initial_set("interface/scene_tabs/show_thumbnail_on_hover", true);
+diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme_manager.cpp
+index 39f60bf..07849bb 100644
+--- a/editor/themes/editor_theme_manager.cpp
++++ b/editor/themes/editor_theme_manager.cpp
+@@ -232,6 +232,11 @@ Ref<EditorTheme> EditorThemeManager::_create_base_theme(const Ref<EditorTheme> &
+ 
+ 	_populate_text_editor_styles(theme, config);
+ 	_populate_visual_shader_styles(theme, config);
++#ifdef ANDROID_ENABLED
++	if (config.enable_touch_optimizations && !OS::get_singleton()->has_feature("xr_editor")) {
++		theme->set_constant("phone_pan_percent", "TextEdit", CLAMP((int)EDITOR_GET("interface/touchscreen/phone_text_pan_percent"), 25, 200));
++	}
++#endif
+ 
+ 	OS::get_singleton()->benchmark_end_measure(get_benchmark_key(), "Create Base Theme");
+ 	return theme;
+diff --git a/platform/android/android_input_handler.cpp b/platform/android/android_input_handler.cpp
+index 4c8b6bd..9736841 100644
+--- a/platform/android/android_input_handler.cpp
++++ b/platform/android/android_input_handler.cpp
+@@ -146,7 +146,7 @@ void AndroidInputHandler::_cancel_all_touch() {
+ 	touch.clear();
+ }
+ 
+-void AndroidInputHandler::_parse_all_touch(bool p_pressed, bool p_canceled, bool p_double_tap) {
++void AndroidInputHandler::_parse_all_touch(bool p_pressed, bool p_canceled) {
+ 	if (touch.size()) {
+ 		//end all if exist
+ 		for (int i = 0; i < touch.size(); i++) {
+@@ -156,7 +156,7 @@ void AndroidInputHandler::_parse_all_touch(bool p_pressed, bool p_canceled, bool
+ 			ev->set_pressed(p_pressed);
+ 			ev->set_canceled(p_canceled);
+ 			ev->set_position(touch[i].pos);
+-			ev->set_double_tap(p_double_tap);
++			ev->set_double_tap(touch[i].double_tap);
+ 			Input::get_singleton()->parse_input_event(ev);
+ 		}
+ 	}
+@@ -167,7 +167,7 @@ void AndroidInputHandler::_release_all_touch() {
+ 	touch.clear();
+ }
+ 
+-void AndroidInputHandler::process_touch_event(int p_event, int p_pointer, const Vector<TouchPos> &p_points, bool p_double_tap) {
++void AndroidInputHandler::process_touch_event(int p_event, int p_pointer, const Vector<TouchPos> &p_points) {
+ 	switch (p_event) {
+ 		case AMOTION_EVENT_ACTION_DOWN: { //gesture begin
+ 			// Release any remaining touches or mouse event
+@@ -180,10 +180,11 @@ void AndroidInputHandler::process_touch_event(int p_event, int p_pointer, const
+ 				touch.write[i].pos = p_points[i].pos;
+ 				touch.write[i].pressure = p_points[i].pressure;
+ 				touch.write[i].tilt = p_points[i].tilt;
++				touch.write[i].double_tap = p_points[i].double_tap;
+ 			}
+ 
+ 			//send touch
+-			_parse_all_touch(true, false, p_double_tap);
++			_parse_all_touch(true, false);
+ 
+ 		} break;
+ 		case AMOTION_EVENT_ACTION_MOVE: { //motion
+diff --git a/platform/android/android_input_handler.h b/platform/android/android_input_handler.h
+index 1fd7478..095efdc 100644
+--- a/platform/android/android_input_handler.h
++++ b/platform/android/android_input_handler.h
+@@ -43,6 +43,7 @@ public:
+ 		Point2 pos;
+ 		float pressure = 0;
+ 		Vector2 tilt;
++		bool double_tap = false;
+ 	};
+ 
+ 	struct MouseEventInfo {
+@@ -90,7 +91,7 @@ private:
+ 
+ 	void _cancel_mouse_event_info(bool p_source_mouse_relative = false);
+ 
+-	void _parse_all_touch(bool p_pressed, bool p_canceled = false, bool p_double_tap = false);
++	void _parse_all_touch(bool p_pressed, bool p_canceled = false);
+ 
+ 	void _release_all_touch();
+ 
+@@ -98,7 +99,7 @@ private:
+ 
+ public:
+ 	void process_mouse_event(int p_event_action, int p_event_android_buttons_mask, Point2 p_event_pos, Vector2 p_delta, bool p_double_click, bool p_source_mouse_relative, float p_pressure, Vector2 p_tilt);
+-	void process_touch_event(int p_event, int p_pointer, const Vector<TouchPos> &p_points, bool p_double_tap);
++	void process_touch_event(int p_event, int p_pointer, const Vector<TouchPos> &p_points);
+ 	void process_magnify(Point2 p_pos, float p_factor);
+ 	void process_pan(Point2 p_pos, Vector2 p_delta);
+ 	void process_joy_event(JoypadEvent p_event);
+diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
+index fcbb102..f4429a8 100644
+--- a/platform/android/java/editor/build.gradle
++++ b/platform/android/java/editor/build.gradle
+@@ -78,7 +78,7 @@ android {
+ 
+     defaultConfig {
+         // The 'applicationId' suffix allows to install Godot 3.x(v3) and 4.x(v4) on the same device
+-        applicationId "org.godotengine.editor.v4"
++        applicationId "org.godotengine.editor.v4.phonepreview3"
+         versionCode generateVersionCode()
+         versionName generateVersionName()
+         minSdkVersion versions.minSdk
+@@ -86,7 +86,7 @@ android {
+ 
+         missingDimensionStrategy 'products', 'editor'
+         manifestPlaceholders += [
+-            editorAppName: "Godot Engine 4",
++            editorAppName: "Godot Phone Preview 3",
+             editorBuildSuffix: ""
+         ]
+ 
+diff --git a/platform/android/java/editor/src/main/AndroidManifest.xml b/platform/android/java/editor/src/main/AndroidManifest.xml
+index e6bbada..6df0c06 100644
+--- a/platform/android/java/editor/src/main/AndroidManifest.xml
++++ b/platform/android/java/editor/src/main/AndroidManifest.xml
+@@ -4,7 +4,7 @@
+     android:installLocation="auto">
+ 
+     <queries>
+-        <package android:name="org.godotengine.godot_gradle_build_environment" />
++        <package android:name="org.godotengine.godot_gradle_build_environment.saftest" />
+     </queries>
+ 
+     <supports-screens
+@@ -61,7 +61,7 @@
+             android:exported="false"
+             android:icon="@mipmap/themed_icon"
+             android:launchMode="singleInstancePerTask"
+-            android:screenOrientation="userLandscape">
++            android:screenOrientation="fullUser">
+             <layout
+                 android:defaultWidth="@dimen/editor_default_window_width"
+                 android:defaultHeight="@dimen/editor_default_window_height" />
+diff --git a/platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt b/platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt
+index fce031f..afdd8d8 100644
+--- a/platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt
++++ b/platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt
+@@ -279,9 +279,8 @@ abstract class BaseGodotEditor : GodotActivity(), GameMenuFragment.GameMenuListe
+ 	override fun onConfigurationChanged(newConfig: Configuration) {
+ 		super.onConfigurationChanged(newConfig)
+ 
+-		// Show EditorTitleBar on small screens only in landscape due to width limitations in portrait.
+-		// TODO: Enable for portrait once the title bar width is optimized.
+-		EditorUtils.toggleTitleBar(isLargeScreen || newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE)
++		// Phone preview title bar scrolls horizontally in either orientation.
++		EditorUtils.toggleTitleBar(true)
+ 	}
+ 
+ 	override fun onDestroy() {
+diff --git a/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt b/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
+index fee970b..cba6093 100644
+--- a/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
++++ b/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
+@@ -111,7 +111,7 @@ internal class GradleBuildEnvironmentClient(private val context: Context) {
+ 		connecting = true;
+ 
+ 		val intent = Intent("org.godotengine.action.BUILD_PROVIDER").apply {
+-			setPackage("org.godotengine.godot_gradle_build_environment")
++			setPackage("org.godotengine.godot_gradle_build_environment.saftest")
+ 		}
+ 		val info = context.packageManager.resolveService(intent, 0)
+ 		if (info == null) {
+diff --git a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt b/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt
+index a2d743e..b9004d0 100644
+--- a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt
++++ b/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt
+@@ -30,13 +30,10 @@
+ 
+ package org.godotengine.godot.input
+ 
+-import android.os.Build
+ import android.view.GestureDetector.SimpleOnGestureListener
+-import android.view.InputDevice
+ import android.view.MotionEvent
+ import android.view.ScaleGestureDetector
+ import android.view.ScaleGestureDetector.OnScaleGestureListener
+-import org.godotengine.godot.GodotLib
+ 
+ /**
+  * Handles regular and scale gesture input related events for the [GodotView] view.
+@@ -51,12 +48,19 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 	}
+ 
+ 	/**
+-	 * Enable pan and scale gestures
++	 * Enable panning gestures.
+ 	 */
+-	var panningAndScalingEnabled = false
++	var panningEnabled = false
++
++	/**
++	 * Enable scaling gestures.
++	 */
++	var scalingEnabled = false
+ 
+ 	var scrollDeadzoneDisabled = false
+ 
++	var longPressEnabled = false
++
+ 	/**
+ 	 * Enable haptic feedback on long-press right-click
+ 	 */
+@@ -181,8 +185,12 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 	override fun onDoubleTapEvent(event: MotionEvent): Boolean {
+ 		if (event.actionMasked == MotionEvent.ACTION_UP) {
+ 			nextDownIsDoubleTap = false
+-			inputHandler.handleMotionEvent(event)
+-		} else if (event.actionMasked == MotionEvent.ACTION_MOVE && !panningAndScalingEnabled) {
++
++			// Long press is restored to its previous value.
++			inputHandler.gestureDetector.setIsLongpressEnabled(longPressEnabled)
++
++			inputHandler.handleMotionEvent(event, event.actionMasked, true)
++		} else if (event.actionMasked == MotionEvent.ACTION_MOVE && !(scalingEnabled && inputHandler.scaleGestureDetector.isQuickScaleEnabled)) {
+ 			inputHandler.handleMotionEvent(event)
+ 		}
+ 
+@@ -190,6 +198,9 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 	}
+ 
+ 	override fun onDoubleTap(event: MotionEvent): Boolean {
++		// Long press is disabled as it interferes with double tap events.
++		inputHandler.gestureDetector.setIsLongpressEnabled(false)
++
+ 		nextDownIsDoubleTap = true
+ 		return true
+ 	}
+@@ -214,7 +225,7 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 
+ 		val x = terminusEvent.x
+ 		val y = terminusEvent.y
+-		if (terminusEvent.pointerCount >= 2 && panningAndScalingEnabled && !pointerCaptureInProgress && !dragInProgress) {
++		if (terminusEvent.pointerCount >= 2 && panningEnabled && !pointerCaptureInProgress && !dragInProgress) {
+ 			inputHandler.handlePanEvent(x, y, distanceX / 5f, distanceY / 5f)
+ 		} else if (!scaleInProgress) {
+ 			dragInProgress = true
+@@ -226,7 +237,7 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 	}
+ 
+ 	override fun onScale(detector: ScaleGestureDetector): Boolean {
+-		if (!panningAndScalingEnabled || pointerCaptureInProgress || dragInProgress) {
++		if (!scalingEnabled || pointerCaptureInProgress || dragInProgress) {
+ 			return false
+ 		}
+ 
+@@ -237,7 +248,7 @@ internal class GodotGestureHandler(private val inputHandler: GodotInputHandler)
+ 	}
+ 
+ 	override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+-		if (!panningAndScalingEnabled || pointerCaptureInProgress || dragInProgress) {
++		if (!scalingEnabled || pointerCaptureInProgress || dragInProgress) {
+ 			return false
+ 		}
+ 		scaleInProgress = true
+diff --git a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotInputHandler.java b/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotInputHandler.java
+index b7c3d22..43e467c 100644
+--- a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotInputHandler.java
++++ b/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotInputHandler.java
+@@ -88,8 +88,8 @@ public class GodotInputHandler implements InputManager.InputDeviceListener, Sens
+ 	private final Godot godot;
+ 	private final InputManager mInputManager;
+ 	private final WindowManager windowManager;
+-	private final GestureDetector gestureDetector;
+-	private final ScaleGestureDetector scaleGestureDetector;
++	final GestureDetector gestureDetector;
++	final ScaleGestureDetector scaleGestureDetector;
+ 	private final GodotGestureHandler godotGestureHandler;
+ 
+ 	/**
+@@ -112,9 +112,12 @@ public class GodotInputHandler implements InputManager.InputDeviceListener, Sens
+ 
+ 		this.godotGestureHandler = new GodotGestureHandler(this);
+ 		this.gestureDetector = new GestureDetector(context, godotGestureHandler);
+-		this.gestureDetector.setIsLongpressEnabled(false);
++		enableLongPress(false);
++
+ 		this.scaleGestureDetector = new ScaleGestureDetector(context, godotGestureHandler);
+ 		this.scaleGestureDetector.setStylusScaleEnabled(true);
++		this.scaleGestureDetector.setQuickScaleEnabled(false);
++
+ 		Configuration config = context.getResources().getConfiguration();
+ 		hasHardwareKeyboardConfig = config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+ 				config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO;
+@@ -125,6 +128,7 @@ public class GodotInputHandler implements InputManager.InputDeviceListener, Sens
+ 	 */
+ 	public void enableLongPress(boolean enable) {
+ 		this.gestureDetector.setIsLongpressEnabled(enable);
++		this.godotGestureHandler.setLongPressEnabled(enable);
+ 	}
+ 
+ 	/**
+@@ -157,7 +161,8 @@ public class GodotInputHandler implements InputManager.InputDeviceListener, Sens
+ 	 * Note: This may interfere with multi-touch handling / support.
+ 	 */
+ 	public void enablePanningAndScalingGestures(boolean enable) {
+-		this.godotGestureHandler.setPanningAndScalingEnabled(enable);
++		this.godotGestureHandler.setPanningEnabled(enable);
++		this.godotGestureHandler.setScalingEnabled(enable);
+ 	}
+ 
+ 	/**
+diff --git a/platform/android/java_godot_lib_jni.cpp b/platform/android/java_godot_lib_jni.cpp
+index fe81516..4f6b3e6 100644
+--- a/platform/android/java_godot_lib_jni.cpp
++++ b/platform/android/java_godot_lib_jni.cpp
+@@ -382,10 +382,11 @@ JNIEXPORT void JNICALL Java_org_godotengine_godot_GodotLib_dispatchTouchEvent(JN
+ 		tp.pos = Point2(p[1], p[2]);
+ 		tp.pressure = p[3];
+ 		tp.tilt = Vector2(p[4], p[5]);
++		tp.double_tap = p_double_tap;
+ 		points.push_back(tp);
+ 	}
+ 
+-	input_handler->process_touch_event(ev, pointer, points, p_double_tap);
++	input_handler->process_touch_event(ev, pointer, points);
+ }
+ 
+ // Called on the UI thread
+diff --git a/scene/gui/code_edit.cpp b/scene/gui/code_edit.cpp
+index 776afd5..d32a2b8 100644
+--- a/scene/gui/code_edit.cpp
++++ b/scene/gui/code_edit.cpp
+@@ -466,9 +466,65 @@ void CodeEdit::_draw_guidelines() {
+ }
+ 
+ void CodeEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
++	int event_device_id = p_gui_input->get_device();
++	Ref<InputEventScreenTouch> touch = p_gui_input;
++	if (touch.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
++		if (code_completion_active) {
++			Vector2 touch_pos = touch->get_position();
++			if (code_completion_rect.has_point(touch_pos) || code_completion_scroll_rect.has_point(touch_pos)) {
++				if (touch->is_pressed()) {
++					is_code_completion_drag_started = true;
++					if (code_completion_force_item_center == -1) {
++						code_completion_force_item_center = code_completion_current_selected;
++					}
++
++					code_completion_current_selected = CLAMP(code_completion_line_ofs + (touch_pos.y - code_completion_rect.position.y) / get_line_height(), 0, code_completion_options.size() - 1);
++					code_completion_pan_offset = 0.0f;
++					if (touch->is_double_tap()) {
++						confirm_code_completion();
++					}
++					queue_redraw();
++					queue_accessibility_update();
++				} else {
++					// Finger lifted up inside the boundaries.
++					is_code_completion_drag_started = false;
++				}
++				accept_event();
++				return;
++			}
++
++			// If touch lands completely outside the completion popup.
++			if (touch->is_pressed()) {
++				cancel_code_completion();
++				set_code_hint("");
++			} else {
++				is_code_completion_drag_started = false;
++				accept_event();
++				return;
++			}
++		} else {
++			if (touch->is_pressed()) {
++				set_code_hint("");
++			}
++		}
++	}
++
++	real_t delta = 0.0;
++	bool is_valid_scroll_event = false;
++
+ 	Ref<InputEventPanGesture> pan_gesture = p_gui_input;
+ 	if (pan_gesture.is_valid() && code_completion_active && code_completion_rect.has_point(pan_gesture->get_position())) {
+-		const real_t delta = pan_gesture->get_delta().y;
++		delta = pan_gesture->get_delta().y;
++		is_valid_scroll_event = true;
++	}
++
++	Ref<InputEventScreenDrag> drag = p_gui_input;
++	if (drag.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION && code_completion_active && is_code_completion_drag_started) {
++		delta = -(drag->get_relative().y / (real_t)get_line_height());
++		is_valid_scroll_event = true;
++	}
++
++	if (is_valid_scroll_event) {
+ 		code_completion_pan_offset += delta;
+ 		if (code_completion_pan_offset <= -1.0) {
+ 			if (code_completion_current_selected > 0) {
+@@ -490,7 +546,7 @@ void CodeEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 	}
+ 
+ 	Ref<InputEventMouseButton> mb = p_gui_input;
+-	if (mb.is_valid()) {
++	if (mb.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
+ 		// Ignore mouse clicks in IME input mode, let TextEdit handle it.
+ 		if (has_ime_text()) {
+ 			TextEdit::gui_input(p_gui_input);
+@@ -621,7 +677,7 @@ void CodeEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 	}
+ 
+ 	Ref<InputEventMouseMotion> mm = p_gui_input;
+-	if (mm.is_valid()) {
++	if (mm.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
+ 		Vector2i mpos = mm->get_position();
+ 		if (is_layout_rtl()) {
+ 			mpos.x = get_size().x - mpos.x;
+diff --git a/scene/gui/code_edit.h b/scene/gui/code_edit.h
+index 3a607c1..f0fd2c0 100644
+--- a/scene/gui/code_edit.h
++++ b/scene/gui/code_edit.h
+@@ -209,6 +209,7 @@ private:
+ 	bool code_completion_enabled = false;
+ 	bool code_completion_forced = false;
+ 
++	Vector2 completion_touch_drag_accum;
+ 	bool code_completion_active = false;
+ 	bool is_code_completion_scroll_hovered = false;
+ 	bool is_code_completion_scroll_pressed = false;
+diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
+index cd092bd..c487df6 100644
+--- a/scene/gui/text_edit.cpp
++++ b/scene/gui/text_edit.cpp
+@@ -891,7 +891,70 @@ void TextEdit::_notification(int p_what) {
+ 		} break;
+ 
+ 		case NOTIFICATION_INTERNAL_PROCESS: {
+-			if (scrolling && get_v_scroll() != target_v_scroll) {
++			if (touch_dragging_starting || touch_dragging_in_progress || touch_dragging_deaccel) {
++				if (touch_dragging_deaccel) {
++					// Deceleration handling loop; finger-up after flick.
++					Vector2 pos = Vector2(h_scroll->get_value(), v_scroll->get_value());
++
++					float line_height = MAX(1, get_line_height());
++					Vector2 frame_movement = drag_speed * get_process_delta_time();
++
++					pos.x += frame_movement.x;
++					pos.y += frame_movement.y / line_height;
++
++					bool turnoff_h = false;
++					bool turnoff_v = false;
++
++					if (pos.x < 0) {
++						pos.x = 0;
++						turnoff_h = true;
++					}
++					if (pos.x > (h_scroll->get_max() - h_scroll->get_page())) {
++						pos.x = h_scroll->get_max() - h_scroll->get_page();
++						turnoff_h = true;
++					}
++
++					if (pos.y < 0) {
++						pos.y = 0;
++						turnoff_v = true;
++					}
++					if (pos.y > (v_scroll->get_max() - v_scroll->get_page())) {
++						pos.y = v_scroll->get_max() - v_scroll->get_page();
++						turnoff_v = true;
++					}
++
++					h_scroll->scroll_to(pos.x);
++					v_scroll->scroll_to(pos.y);
++
++					float sgn_x = drag_speed.x < 0 ? -1 : 1;
++					float val_x = Math::abs(drag_speed.x);
++					val_x -= 1000.0f * get_process_delta_time();
++					if (val_x < 0) {
++						turnoff_h = true;
++					}
++
++					float sgn_y = drag_speed.y < 0 ? -1 : 1;
++					float val_y = Math::abs(drag_speed.y);
++					val_y -= 1000.0f * get_process_delta_time();
++					if (val_y < 0) {
++						turnoff_v = true;
++					}
++
++					drag_speed = Vector2(sgn_x * val_x, sgn_y * val_y);
++
++					if (turnoff_h && turnoff_v) {
++						_cancel_inertial_scroll();
++					}
++				} else {
++					// Active touch scrolling; finger-down.
++					if (time_since_motion == 0.0 || time_since_motion > 0.1) {
++						Vector2 diff = drag_accum - last_drag_accum;
++						last_drag_accum = drag_accum;
++						drag_speed = diff / get_process_delta_time();
++					}
++					time_since_motion += get_process_delta_time();
++				}
++			} else if (scrolling && get_v_scroll() != target_v_scroll) {
+ 				double target_y = target_v_scroll - get_v_scroll();
+ 				double dist = std::abs(target_y);
+ 				// To ensure minimap is responsive override the speed setting.
+@@ -1955,6 +2018,25 @@ void TextEdit::_notification(int p_what) {
+ 				}
+ 			}
+ 
++			// Selection handles.
++			if (show_selection_handle && selection_handle_enabled) {
++				for (int c = 0; c < get_caret_count(); c++) {
++					if (!has_selection(c)) {
++						continue;
++					}
++
++					Vector<Point2i> handles_pos = _get_selection_handles_pos(c);
++					Point2i start_pos = handles_pos[0];
++					Point2i end_pos = handles_pos[1];
++					if (start_pos.x != -1) {
++						_draw_selection_handle(start_pos);
++					}
++					if (end_pos.x != -1) {
++						_draw_selection_handle(end_pos);
++					}
++				}
++			}
++
+ 			if (has_focus()) {
+ 				_update_ime_window_position();
+ 			}
+@@ -2058,6 +2140,54 @@ void TextEdit::_notification(int p_what) {
+ 	}
+ }
+ 
++void TextEdit::_draw_selection_handle(Vector2 p_pos) const {
++	Color handle_color = theme_cache.caret_color;
++	int line_height = get_line_height();
++
++	int handle_line_width = theme_cache.caret_width * MAX(1, theme_cache.base_scale);
++	RS::get_singleton()->canvas_item_add_line(text_ci, p_pos, p_pos + Vector2(0, line_height), handle_color, handle_line_width);
++
++	Vector2 circle_center = p_pos + Vector2(0, line_height + selection_handle_radius);
++	RS::get_singleton()->canvas_item_add_circle(text_ci, circle_center, selection_handle_radius, handle_color);
++}
++
++/*
++ * Returns true if p_column is at index 0 or if it is the first character of a wrapped line segment.
++ */
++bool TextEdit::_is_first_column(int p_line, int p_column) const {
++	bool is_first_column = p_column == 0;
++	if (!is_first_column && is_line_wrapped(p_line)) {
++		int wrap_index = get_line_wrap_index_at_column(p_line, p_column);
++		int wrap_index_last_column = get_line_wrap_index_at_column(p_line, p_column - 1);
++		is_first_column = wrap_index != wrap_index_last_column;
++	}
++	return is_first_column;
++}
++
++Vector<Point2i> TextEdit::_get_selection_handles_pos(int p_caret) const {
++	int selection_from_line = get_selection_from_line(p_caret);
++	int selection_from_column = get_selection_from_column(p_caret);
++	int selection_to_line = get_selection_to_line(p_caret);
++	int selection_to_column = get_selection_to_column(p_caret);
++	Rect2i start_rect = get_rect_at_line_column(selection_from_line, selection_from_column);
++	Rect2i end_rect = get_rect_at_line_column(selection_to_line, selection_to_column);
++
++	Point2i start_pos = start_rect.position;
++	if (start_pos.x != -1 && !_is_first_column(selection_from_line, selection_from_column)) {
++		start_pos.x += start_rect.size.x;
++	}
++
++	Point2i end_pos = end_rect.position;
++	if (end_pos.x != -1 && !_is_first_column(selection_to_line, selection_to_column)) {
++		end_pos.x += end_rect.size.x;
++	}
++
++	Vector<Point2i> result;
++	result.push_back(start_pos);
++	result.push_back(end_pos);
++	return result;
++}
++
+ void TextEdit::unhandled_key_input(const Ref<InputEvent> &p_event) {
+ 	Ref<InputEventKey> k = p_event;
+ 
+@@ -2257,9 +2387,12 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 	double prev_v_scroll = v_scroll->get_value();
+ 	double prev_h_scroll = h_scroll->get_value();
+ 
++	int event_device_id = p_gui_input->get_device();
+ 	Ref<InputEventMouseButton> mb = p_gui_input;
+ 
+-	if (mb.is_valid()) {
++	if (mb.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
++		show_selection_handle = false; // Hiding selection handle because mouse is used.
++
+ 		Vector2i mpos = mb->get_position();
+ 		if (is_layout_rtl()) {
+ 			mpos.x = get_size().x - mpos.x;
+@@ -2507,89 +2640,303 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
+ 					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
+ 				}
+-			}
+ 
+-			if (editable) {
+-				_show_virtual_keyboard();
++				if (editable) {
++					_show_virtual_keyboard();
++				}
+ 			}
+ 		}
+ 	}
+ 
+-	const Ref<InputEventPanGesture> pan_gesture = p_gui_input;
+-	if (pan_gesture.is_valid()) {
+-		const real_t delta = pan_gesture->get_delta().y;
+-		if (delta < 0) {
+-			_scroll_up(-delta, false);
+-		} else {
+-			_scroll_down(delta, false);
++	Ref<InputEventScreenTouch> touch = p_gui_input;
++	if (touch.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
++		show_selection_handle = true;
++
++		// Prioritizing selection handle input
++		if (touch->is_pressed() && selection_handle_enabled) {
++			for (int c = 0; c < get_caret_count(); c++) {
++				if (!has_selection(c)) {
++					continue;
++				}
++
++				Vector<Point2i> handles_pos = _get_selection_handles_pos(c);
++				Point2i start_pos = handles_pos[0];
++				Point2i end_pos = handles_pos[1];
++
++				int line_height = get_line_height();
++
++				float start_dist = touch->get_position().distance_to(start_pos + Vector2(0, line_height + selection_handle_radius));
++				bool start_touched = start_pos.x != -1 && start_dist < selection_handle_radius * 2;
++				float end_dist = touch->get_position().distance_to(end_pos + Vector2(0, line_height + selection_handle_radius));
++				bool end_touched = end_pos.x != -1 && end_dist < selection_handle_radius * 2;
++
++				if (!start_touched && !end_touched) {
++					continue;
++				}
++
++				if (start_touched && end_touched) {
++					start_touched = start_dist < end_dist;
++					end_touched = !start_touched;
++				}
++
++				if (start_touched) {
++					selection_handle_drag_type = is_caret_after_selection_origin(c) ? SELECTION_HANDLE_START : SELECTION_HANDLE_END;
++					selection_handle_drag_offset = touch->get_position() - Vector2(start_pos) - Vector2(0, line_height / 2);
++				} else {
++					selection_handle_drag_type = is_caret_after_selection_origin(c) ? SELECTION_HANDLE_END : SELECTION_HANDLE_START;
++					selection_handle_drag_offset = touch->get_position() - Vector2(end_pos) - Vector2(0, line_height / 2);
++				}
++				dragging_caret_index = c;
++				_cancel_inertial_scroll();
++				accept_event();
++				return; // Return early to block default touch logic
++			}
+ 		}
+-		h_scroll->set_value(h_scroll->get_value() + pan_gesture->get_delta().x * 100);
+-		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
+-			accept_event(); // Accept event if scroll changed.
++
++		if (touch->is_released() && selection_handle_drag_type != SELECTION_HANDLE_NONE) {
++			selection_handle_drag_type = SELECTION_HANDLE_NONE;
++			dragging_caret_index = -1;
++			accept_event();
++			return;
+ 		}
+-		queue_accessibility_update();
+ 
+-		return;
+-	}
++		if (touch->is_pressed() && !touch->is_double_tap()) {
++			if (draw_minimap) {
++				_update_minimap_click();
++				if (dragging_minimap) {
++					return;
++				}
++			}
+ 
+-	Ref<InputEventMouseMotion> mm = p_gui_input;
++			if (touch_dragging_deaccel) {
++				_cancel_inertial_scroll();
++			}
+ 
+-	if (mm.is_valid()) {
+-		Vector2i mpos = mm->get_position();
+-		if (is_layout_rtl()) {
+-			mpos.x = get_size().x - mpos.x;
++			touch_dragging_starting = true;
++			touch_dragging_in_progress = false;
++
++			drag_speed = Vector2();
++			drag_accum = Vector2();
++			last_drag_accum = Vector2();
++			drag_from = Vector2(prev_h_scroll, prev_v_scroll);
++			touch_dragging_deaccel = false;
++			time_since_motion = 0.0;
++
++			set_process_internal(true);
+ 		}
+ 
+-		if (mm->get_button_mask().has_flag(MouseButtonMask::LEFT) && get_viewport()->gui_get_drag_data() == Variant()) {
+-			// Update if not in drag and drop.
++		if ((touch->is_pressed() && touch->is_double_tap()) || (touch->is_released() && !touch->is_double_tap() && !touch_dragging_in_progress && !pan_gesture_performed)) {
++			// Otherwise, if we receive a double touch press event, or a single touch release event with no touch dragging having occurred,
++			// we process as a regular tap, similar to how mouse click are handled above omitting logic not relevant to touch taps.
++			// Notice that a key difference from the mouse click handling logic and double tap events is that for single tap, we apply the logic below on release instead of on press.
++			// This is because we're unsure whether single tap press event will end as a single tap press->release event, or turn into a drag (press->drag->release) event.
++			Vector2i touch_pos = touch->get_position();
++			if (is_layout_rtl()) {
++				touch_pos.x = get_size().x - touch_pos.x;
++			}
+ 			_reset_caret_blink_timer();
+ 
+-			if (draw_minimap && !dragging_selection) {
+-				_update_minimap_drag();
+-			}
+-
+-			if (!dragging_minimap && !has_ime_text()) {
+-				switch (selecting_mode) {
+-					case SelectionMode::SELECTION_MODE_POINTER: {
+-						_update_selection_mode_pointer();
+-					} break;
+-					case SelectionMode::SELECTION_MODE_WORD: {
+-						_update_selection_mode_word();
+-					} break;
+-					case SelectionMode::SELECTION_MODE_LINE: {
+-						_update_selection_mode_line();
+-					} break;
+-					default: {
++			apply_ime();
++
++			Point2i pos = get_line_column_at_pos(touch_pos);
++			int line = pos.y;
++			int col = pos.x;
++
++			// Gutters.
++			Vector2i current_hovered_gutter = _get_hovered_gutter(touch_pos);
++			if (current_hovered_gutter != Vector2i(-1, -1)) {
++				emit_signal(SNAME("gutter_clicked"), current_hovered_gutter.y, current_hovered_gutter.x);
++				return;
++			}
++			int left_margin = get_line_start_margin();
++			if (touch_pos.x < left_margin + gutters_width + gutter_padding) {
++				return;
++			}
++
++			// Minimap.
++			if (draw_minimap) {
++				if (touch->is_double_tap()) {
++					_update_minimap_click();
++					if (dragging_minimap) {
++						return;
++					}
++				} else if (dragging_minimap) {
++					// touch is released, cleanup minimap logic.
++					dragging_minimap = false;
++					can_drag_minimap = false;
++					minimap_clicked = false;
++					return;
++				}
++			}
++
++			// Update caret.
++			if (!touch->is_double_tap()) {
++				// A regular click clears all other carets.
++				int caret = 0;
++				remove_secondary_carets();
++				deselect();
++
++				_push_current_op();
++				set_caret_line(line, false, true, -1, caret);
++				set_caret_column(col, false, caret);
++
++				adjust_viewport_to_caret();
++			} else {
++				// Start double-click select word mode.
++				set_selection_mode(SelectionMode::SELECTION_MODE_WORD);
++				_update_selection_mode_word(true);
++			}
++
++			// Click inline objects.
++			if (inline_object_click_handler.is_valid()) {
++				int xmargin_beg = left_margin + gutters_width + gutter_padding;
++				int wrap_i = get_line_wrap_index_at_column(pos.y, pos.x);
++				const float wrap_indent = _get_wrap_indent_offset(pos.y, wrap_i, is_layout_rtl());
++
++				Ref<TextParagraph> ldata = text.get_line_data(line);
++				for (const Variant &inline_key : ldata->get_line_objects(wrap_i)) {
++					if (!is_inline_info_valid(inline_key)) {
++						continue;
++					}
++					Dictionary info = inline_key.duplicate();
++					info["line"] = line;
++					Rect2 obj_rect = ldata->get_line_object_rect(wrap_i, inline_key);
++					obj_rect.position.x += xmargin_beg + wrap_indent - first_visible_col;
++
++					if (touch_pos.x > obj_rect.position.x && touch_pos.x < obj_rect.get_end().x) {
++						Rect2 col_rect = get_rect_at_line_column(line, col);
++						col_rect.position += get_screen_position() + Vector2(col_rect.size.x, 0);
++						col_rect.size = obj_rect.size;
++						set_selection_mode(TextEdit::SelectionMode::SELECTION_MODE_NONE);
++						inline_object_click_handler.call(info, col_rect);
+ 						break;
+ 					}
+ 				}
+ 			}
+-		}
+ 
+-		// Update hovered gutter.
+-		Vector2i current_hovered_gutter = _get_hovered_gutter(mpos);
+-		if (current_hovered_gutter != hovered_gutter) {
+-			hovered_gutter = current_hovered_gutter;
++			queue_accessibility_update();
+ 			queue_redraw();
+ 		}
+ 
+-		if (drag_action && can_drop_data(mpos, get_viewport()->gui_get_drag_data())) {
+-			apply_ime();
+-			// Update drag and drop caret.
+-			drag_caret_force_displayed = true;
+-			Point2i pos = get_line_column_at_pos(get_local_mouse_pos());
++		if (touch->is_released()) {
++			if (!touch_dragging_in_progress) {
++				// If touch dragging did not occur, we perform some tidy up similar to what's done for the mouse click logic.
++				if (has_ime_text()) {
++					// Ignore mouse up in IME input mode.
++				} else {
++					dragging_selection = false;
++					set_selection_mode(SelectionMode::SELECTION_MODE_NONE);
++					click_select_held->stop();
++					if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
++						DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
++					}
+ 
+-			if (drag_caret_index == -1) {
+-				// Force create a new caret for drag and drop.
+-				carets.push_back(Caret());
+-				drag_caret_index = carets.size() - 1;
++					// Avoid showing the virtual keyboard when released on the minimap, or pan gesture performed.
++					if (editable && !dragging_minimap && !pan_gesture_performed) {
++						_show_virtual_keyboard();
++					}
++					dragging_minimap = false;
++					can_drag_minimap = false;
++					pan_gesture_performed = false;
++				}
+ 			}
+ 
+-			drag_caret_force_displayed = true;
+-			set_caret_line(pos.y, false, true, -1, drag_caret_index);
+-			set_caret_column(pos.x, true, drag_caret_index);
+-			dragging_selection = true;
++			if (touch_dragging_starting || touch_dragging_in_progress) {
++				if (touch->is_canceled() || drag_speed == Vector2()) {
++					_cancel_inertial_scroll();
++				} else {
++					touch_dragging_deaccel = true;
++				}
++			}
++
++			touch_dragging_starting = false;
++			touch_dragging_in_progress = false;
++		}
++	}
++
++	Ref<InputEventScreenDrag> drag = p_gui_input;
++	if (drag.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
++		show_selection_handle = true; // Showing selection handle because native touch input is used.
++
++		if (selection_handle_drag_type != SELECTION_HANDLE_NONE) {
++			Vector2 corrected_text_pos = drag->get_position() - selection_handle_drag_offset;
++			Point2i pos = get_line_column_at_pos(corrected_text_pos);
++			int c = dragging_caret_index;
++
++			if (selection_handle_drag_type == SELECTION_HANDLE_END) {
++				select(get_selection_origin_line(c), get_selection_origin_column(c), pos.y, pos.x, c);
++			} else {
++				select(pos.y, pos.x, get_caret_line(c), get_caret_column(c), c);
++			}
++
++			accept_event();
++			return;
++		}
++
++		// If we've started dragging and aren't actively processing deceleration momentum
++		if (touch_dragging_starting && !touch_dragging_deaccel) {
++			touch_dragging_in_progress = true;
++			Vector2 motion = drag->get_relative();
++
++			drag_accum -= motion;
++
++			// Convert the vertical accumulation from raw pixels to lines
++			float line_height = MAX(1, get_line_height());
++			float vertical_line_offset = drag_accum.y / line_height;
++
++			Vector2 diff = drag_from + Vector2(drag_accum.x, vertical_line_offset);
++			h_scroll->scroll_to(diff.x);
++			v_scroll->scroll_to(diff.y);
++
++			time_since_motion = 0.0;
++			accept_event();
++		} else {
++			// Likely follow up from a double tap touch event; we apply similar logic as the mouse motion logic.
++			_on_drag_or_mouse_motion_event(drag->get_position(), true);
++		}
++	}
++
++	const Ref<InputEventPanGesture> pan_gesture = p_gui_input;
++	if (pan_gesture.is_valid()) {
++		// A pan gesture starts with two fingers, so we mark both a drag and a pan as in progress.
++		// When the first finger is lifted, it triggers a touch release event that clears touch_dragging_in_progress,
++		// it performs same like the end of a single-finger drag.
++		// pan_gesture_performed remains set until the second touch release event, allowing us
++		// to detect that the interaction was part of a pan gesture and avoid showing the virtual keyboard.
++		touch_dragging_in_progress = true;
++		pan_gesture_performed = true;
++		Vector2 pan_delta = pan_gesture->get_delta();
++		real_t horizontal_multiplier = 100.0;
++#if defined(ANDROID_ENABLED) && defined(TOOLS_ENABLED)
++		if (Engine::get_singleton()->is_editor_hint() && has_theme_constant("phone_pan_percent", "TextEdit")) {
++			// GodotGestureHandler sends Android motion pixels / 5. Recover pixels,
++			// then convert vertical motion to rows. No change to mouse-wheel input,
++			// caret/selection gestures, desktop builds, or exported game templates.
++			const real_t sensitivity = get_theme_constant("phone_pan_percent", "TextEdit") / 100.0;
++			pan_delta *= 5.0 * sensitivity;
++			pan_delta.y /= MAX(1, get_line_height());
++			horizontal_multiplier = 1.0;
++		}
++#endif
++		const real_t delta = pan_delta.y;
++		if (delta < 0) {
++			_scroll_up(-delta, false);
++		} else {
++			_scroll_down(delta, false);
+ 		}
++		h_scroll->set_value(h_scroll->get_value() + pan_delta.x * horizontal_multiplier);
++		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
++			accept_event(); // Accept event if scroll changed.
++		}
++		queue_accessibility_update();
++
++		return;
++	}
++
++	Ref<InputEventMouseMotion> mm = p_gui_input;
++
++	if (mm.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
++		_on_drag_or_mouse_motion_event(mm->get_position(), mm->get_button_mask().has_flag(MouseButtonMask::LEFT));
+ 	}
+ 
+ 	if (draw_minimap && !dragging_selection) {
+@@ -2884,6 +3231,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 	}
+ }
+ 
++void TextEdit::_on_drag_or_mouse_motion_event(Vector2i p_event_position, bool p_is_left_click_or_drag) {
++	if (is_layout_rtl()) {
++		p_event_position.x = get_size().x - p_event_position.x;
++	}
++
++	if (p_is_left_click_or_drag && get_viewport()->gui_get_drag_data() == Variant()) {
++		// Update if not in drag and drop.
++		_reset_caret_blink_timer();
++
++		if (draw_minimap && !dragging_selection) {
++			_update_minimap_drag();
++		}
++
++		if (!dragging_minimap && !has_ime_text()) {
++			switch (selecting_mode) {
++				case SelectionMode::SELECTION_MODE_POINTER: {
++					_update_selection_mode_pointer();
++				} break;
++				case SelectionMode::SELECTION_MODE_WORD: {
++					_update_selection_mode_word();
++				} break;
++				case SelectionMode::SELECTION_MODE_LINE: {
++					_update_selection_mode_line();
++				} break;
++				default: {
++					break;
++				}
++			}
++		}
++	}
++
++	// Update hovered gutter.
++	Vector2i current_hovered_gutter = _get_hovered_gutter(p_event_position);
++	if (current_hovered_gutter != hovered_gutter) {
++		hovered_gutter = current_hovered_gutter;
++		queue_redraw();
++	}
++
++	if (drag_action && can_drop_data(p_event_position, get_viewport()->gui_get_drag_data())) {
++		apply_ime();
++		// Update drag and drop caret.
++		drag_caret_force_displayed = true;
++		Point2i pos = get_line_column_at_pos(get_local_mouse_pos());
++
++		if (drag_caret_index == -1) {
++			// Force create a new caret for drag and drop.
++			carets.push_back(Caret());
++			drag_caret_index = carets.size() - 1;
++		}
++
++		drag_caret_force_displayed = true;
++		set_caret_line(pos.y, false, true, -1, drag_caret_index);
++		set_caret_column(pos.x, true, drag_caret_index);
++		dragging_selection = true;
++	}
++}
++
++void TextEdit::_cancel_inertial_scroll() {
++	set_process_internal(false);
++	touch_dragging_deaccel = false;
++	drag_speed = Vector2();
++	drag_accum = Vector2();
++	last_drag_accum = Vector2();
++	drag_from = Vector2();
++}
++
+ /* Input actions. */
+ void TextEdit::_swap_current_input_direction() {
+ 	if (input_direction == TEXT_DIRECTION_LTR) {
+@@ -3410,6 +3823,10 @@ void TextEdit::_update_theme_item_cache() {
+ 	if (text.get_line_height() + theme_cache.line_spacing < 1) {
+ 		WARN_PRINT("Line height is too small, please increase font_size and/or line_spacing");
+ 	}
++
++	// The value was chosen after trying a few different radii.
++	// 10.0 provided the best balance between being easy to grab without making the touch area feel too large.
++	selection_handle_radius = 10.0 * theme_cache.base_scale;
+ }
+ 
+ void TextEdit::_update_caches(bool p_invalidate_all) {
+@@ -3491,6 +3908,15 @@ void TextEdit::_update_ime_text() {
+ 	queue_redraw();
+ }
+ 
++
++void TextEdit::refresh_virtual_keyboard() {
++	// Keep native IME text/selection synchronized after an editor toolbar action.
++	// Never open a hidden keyboard or take focus from another field.
++	if (has_focus() && DisplayServer::get_singleton()->virtual_keyboard_get_height() > 0) {
++		_show_virtual_keyboard();
++	}
++}
++
+ void TextEdit::_show_virtual_keyboard() {
+ 	_update_ime_window_position();
+ 
+@@ -6378,6 +6804,14 @@ void TextEdit::delete_selection(int p_caret) {
+ 	end_complex_operation();
+ }
+ 
++void TextEdit::set_selection_handle_enabled(bool p_enabled) {
++	selection_handle_enabled = p_enabled;
++}
++
++bool TextEdit::is_selection_handle_enabled() const {
++	return selection_handle_enabled;
++}
++
+ /* Line wrapping. */
+ void TextEdit::set_line_wrapping_mode(LineWrappingMode p_wrapping_mode) {
+ 	if (line_wrapping_mode != p_wrapping_mode) {
+@@ -7463,6 +7897,9 @@ void TextEdit::_bind_methods() {
+ 	ClassDB::bind_method(D_METHOD("deselect", "caret_index"), &TextEdit::deselect, DEFVAL(-1));
+ 	ClassDB::bind_method(D_METHOD("delete_selection", "caret_index"), &TextEdit::delete_selection, DEFVAL(-1));
+ 
++	ClassDB::bind_method(D_METHOD("set_selection_handle_enabled", "enable"), &TextEdit::set_selection_handle_enabled);
++	ClassDB::bind_method(D_METHOD("is_selection_handle_enabled"), &TextEdit::is_selection_handle_enabled);
++
+ 	/* Line wrapping. */
+ 	BIND_ENUM_CONSTANT(LINE_WRAPPING_NONE);
+ 	BIND_ENUM_CONSTANT(LINE_WRAPPING_BOUNDARY);
+@@ -7625,6 +8062,7 @@ void TextEdit::_bind_methods() {
+ 	ADD_PROPERTY(PropertyInfo(Variant::INT, "autowrap_mode", PROPERTY_HINT_ENUM, "Arbitrary:1,Word:2,Word (Smart):3"), "set_autowrap_mode", "get_autowrap_mode");
+ 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "indent_wrapped_lines"), "set_indent_wrapped_lines", "is_indent_wrapped_lines");
+ 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tab_input_mode"), "set_tab_input_mode", "get_tab_input_mode");
++	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "selection_handle_enabled"), "set_selection_handle_enabled", "is_selection_handle_enabled");
+ 
+ 	ADD_GROUP("Virtual Keyboard", "virtual_keyboard_");
+ 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_keyboard_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_virtual_keyboard_enabled", "is_virtual_keyboard_enabled");
+diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
+index 8470ccc..fa9e305 100644
+--- a/scene/gui/text_edit.h
++++ b/scene/gui/text_edit.h
+@@ -510,6 +510,36 @@ private:
+ 	uint64_t last_dblclk = 0;
+ 	Vector2 last_dblclk_pos;
+ 
++	bool touch_dragging_starting = false;
++	bool touch_dragging_in_progress = false;
++	bool touch_dragging_deaccel = false;
++	Vector2 drag_accum;
++	Vector2 drag_from;
++	Vector2 drag_speed;
++	Vector2 last_drag_accum;
++	double time_since_motion = 0.0;
++	bool pan_gesture_performed = false;
++
++	enum SelectionHandleDragType {
++		SELECTION_HANDLE_NONE,
++		SELECTION_HANDLE_START,
++		SELECTION_HANDLE_END,
++	};
++
++	SelectionHandleDragType selection_handle_drag_type = SELECTION_HANDLE_NONE;
++	float selection_handle_radius;
++	int dragging_caret_index = -1;
++	Vector2 selection_handle_drag_offset;
++	bool show_selection_handle = false;
++	bool selection_handle_enabled = true;
++	Vector<Point2i> _get_selection_handles_pos(int p_cursor) const;
++	bool _is_first_column(int p_line, int p_column) const;
++	void _draw_selection_handle(Vector2 p_pos) const;
++
++	void _cancel_inertial_scroll();
++
++	void _on_drag_or_mouse_motion_event(Vector2i p_event_position, bool p_is_left_click_or_drag);
++
+ 	void _selection_changed(int p_caret = -1);
+ 	void _click_selection_held();
+ 
+@@ -840,6 +870,7 @@ public:
+ 	void set_shortcut_keys_enabled(bool p_enabled);
+ 	bool is_shortcut_keys_enabled() const;
+ 
++	void refresh_virtual_keyboard();
+ 	void set_virtual_keyboard_enabled(bool p_enabled);
+ 	bool is_virtual_keyboard_enabled() const;
+ 
+@@ -1040,6 +1071,9 @@ public:
+ 	void deselect(int p_caret = -1);
+ 	void delete_selection(int p_caret = -1);
+ 
++	void set_selection_handle_enabled(bool p_enabled);
++	bool is_selection_handle_enabled() const;
++
+ 	/* Line wrapping. */
+ 	void set_line_wrapping_mode(LineWrappingMode p_wrapping_mode);
+ 	LineWrappingMode get_line_wrapping_mode() const;

@@ -1,0 +1,126 @@
+{
+  "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "patch_sha256": "3d4d14b75627a64af7bee1493e1af8c618943b7065e7a5807a7a862983eba413",
+  "files": {
+    "doc/classes/TextEdit.xml": {
+      "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
+      "after": "4859ebcd1c1b49fc306f58fc1cdc7340037205c140f0d0884d2ae8747306f8c5"
+    },
+    "editor/docks/editor_dock_manager.cpp": {
+      "before": "ced7fbc38c48f1f872c79e498612c957ca9e369b062ff8e8cb5bdb54a1541c6f",
+      "after": "4d7606cd3cf1dcd2d8460f95fea8a95cb07df70b5c186f68cfae56965cc85282"
+    },
+    "editor/docks/editor_dock_manager.h": {
+      "before": "e8cd2129eb2fbbb4c639b572e009839c610fb071418511042eebd4f465d0ccb7",
+      "after": "f10499ecc6c767c57b7aa56f19571153cd3c86d5e45104fedd264109b758eb27"
+    },
+    "editor/editor_main_screen.cpp": {
+      "before": "3096b2410d4e4d5dfafbce9fdb80b5c7ebca9e3d3a97231621c6d604282c8482",
+      "after": "cf54cbf43e53e33d7e050b0142513520dddee190c6dffb2d0b9c577dfd41b92b"
+    },
+    "editor/editor_main_screen.h": {
+      "before": "7d700a5bb4009324a15cf4571a4320e50cf76abd6eb4186445c2a83c327790f9",
+      "after": "bc82b1a9261d7b55fb8539ac1dae4bdbaac77305036c094932b8a2d43ea7ac59"
+    },
+    "editor/editor_node.cpp": {
+      "before": "ca8e106bffb9501c82cacc196075dfa968a7b9a44130bb84af357202215e3ca6",
+      "after": "8a3123f130d4ba4fc42ee45e3303f6da98e59013bffdfb99ffc1d126033046a8"
+    },
+    "editor/editor_node.h": {
+      "before": "ed18ed39b5f1f036128cc7e7fa6a79056cddbbc6a09cb7dea79a9e61df68a1d6",
+      "after": "2fce1014ac9f996695638de42e05253a77238d3895bfb82393f105d3aa10fc84"
+    },
+    "editor/gui/code_editor.cpp": {
+      "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
+      "after": "3bfd5cac01385c3fa2e9e52fb8f003b20cb45a6dbb98cdba2409b33334a53b4c"
+    },
+    "editor/gui/code_editor.h": {
+      "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
+      "after": "df60710107b64f149a2c6dde0f562f05a3a58ff60f95d4b9f891555152356c80"
+    },
+    "editor/gui/create_dialog.cpp": {
+      "before": "b4174360394a84086042c081c046f4d3d9a433b89c130e422abd7f385c9d0ebf",
+      "after": "c21b1a1f1be30f0056ff3f35c1265b7c58d0c4751fd601cce9bceab324044c8a"
+    },
+    "editor/gui/touch_actions_panel.cpp": {
+      "before": "e46e443e4c75ea216ced4ddd6cc6a0794a172aaef50fc797df5806f00cd5f1cd",
+      "after": "5ec240a87e460436185dde4d00f991a206a76d57f604fa69d6d2617d57a1db26"
+    },
+    "editor/scene/3d/node_3d_editor_plugin.cpp": {
+      "before": "e5a5a260cf93a622a97b611e9af473f8d953e8bf17d4e091287a1a3048ae6c7b",
+      "after": "7fee2681f9502fc6368d92934bccb8e574340e6968b007f25d0d20fd25d6fa5e"
+    },
+    "editor/scene/canvas_item_editor_plugin.cpp": {
+      "before": "6f17b25d5469d44de43fb0da2bc705a372d99e60abb0125c8a1e46e463566780",
+      "after": "8a8c0541d45d203c995da6c6048d499c50a690ceba625284874711ce9bf8cadc"
+    },
+    "editor/script/script_editor_plugin.cpp": {
+      "before": "18e0bac3f5fa7c2fe8117907af86282b92855d283ae6ab79b6a0587a87560947",
+      "after": "67ab9f38c36c2a0293af5715fc447ab13f3daf92df98a4ab528dc67cd051ad8a"
+    },
+    "editor/script/script_editor_plugin.h": {
+      "before": "3d21d4d18c7378937d0e87b24bd14f5b919ab8a6fd66d3776874c0558c1cf1bb",
+      "after": "56eb35e412680f0369d6f602d3edb0067a194e0d5dbf5fd3c31323ea9d46d10c"
+    },
+    "editor/settings/editor_settings.cpp": {
+      "before": "a9b1c5ff8ff60353f8e3803218fe064f097c573d36e82113b94e347fe8f44906",
+      "after": "0e0e102894f41959b72915db20382ca80bac8d5254be10ad44bc99dec668f13b"
+    },
+    "editor/themes/editor_theme_manager.cpp": {
+      "before": "08e5288271c48058340b7c1b6acda2e016601dcbfd9248b064bf3a62144f11c9",
+      "after": "3db2f25ccd84392f4a0094472182b4cbef93e2da3e531e6eb6ae955712e90c5f"
+    },
+    "platform/android/android_input_handler.cpp": {
+      "before": "b5a8cb9ab4b6a0fbf5fbd822c4aebcb72407739de626c6d815bf1d796e81512a",
+      "after": "7ac7b4058ffd6ace263e6f4d8b9150fb680a315efbf0f1c15f189bbe867ace7c"
+    },
+    "platform/android/android_input_handler.h": {
+      "before": "749a6f7e952fac4cef4b979f3406a55e33a5622fa841e4d74cc1d41c3b3bc9df",
+      "after": "cb7a627a4f3f7ea71163257e6932a4b8e3ba6317715df27ccaa51b28b662a276"
+    },
+    "platform/android/java/editor/build.gradle": {
+      "before": "93e2bd247a80dffcf271dbec67646d8e91cd6e50b432b87c15400b7a2904652c",
+      "after": "df1f1f1afd37ac05daae76cf780560097d476faedfa4947d055d53d36b521761"
+    },
+    "platform/android/java/editor/src/main/AndroidManifest.xml": {
+      "before": "513a695f9df2c5ed0be585e381055d181edce52f12ea619eb4b34c4da22d6c4b",
+      "after": "b799e8c4a263a97b25f0ec21cce83ae5a534fa61bbac73f83746adab6a7ee011"
+    },
+    "platform/android/java/editor/src/main/java/org/godotengine/editor/BaseGodotEditor.kt": {
+      "before": "0228ae603a1b3a8d81d57b7db657b94263e5a57b631dd609451a276840550f5d",
+      "after": "134a71965a1b2a3c2f60112661b490a360cffbd399e12d9abcac8a6e6ead8759"
+    },
+    "platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt": {
+      "before": "d753f8915ca9e5300226ecc964a01f9a2792b9f7fdf030d0637cd7f01a94a766",
+      "after": "3578a10c08b4b21391baad4117c3dea039df06f7f5cc365f0c230f3556d04cef"
+    },
+    "platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt": {
+      "before": "9f98995d0fdcc1fe56e38ea8519f10f6656920a57520bfa357197733e13d9549",
+      "after": "6967caef41778bf89d1a6bbb3867f5ef0c8489ec4748bc0c335b21b4a7969497"
+    },
+    "platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotInputHandler.java": {
+      "before": "d641b708f5a6967872620a658a092d88defeb7757599d5f6e86b031c60d23314",
+      "after": "362d6aa4458b64ca045fabdbb2934bad87536dc1e95cb9707ec7ed807a6a6951"
+    },
+    "platform/android/java_godot_lib_jni.cpp": {
+      "before": "ace9423f36253d593a1d135e740406dee661020448694c12b79ba889495ef133",
+      "after": "a72f24de9b4017cb3c60629e65dedf28bd05a0003e8f3a92a6f22dad1862d699"
+    },
+    "scene/gui/code_edit.cpp": {
+      "before": "6785b917ba22d36241563ac6653274d683b3c4be81aaec3849de9758e65e97a7",
+      "after": "51227d6e799aa365e2c22eebc65f54d7886eda7131c3496cbee4a690c0c28c58"
+    },
+    "scene/gui/code_edit.h": {
+      "before": "9139c2e8428fa2d24d5f06ce0f952af03e56b9b51324b6b8aa80f9855d89cefc",
+      "after": "f17da95512cbe0c1578e96641d0cbb2d2fc283350d3250d55416d57536bd29e3"
+    },
+    "scene/gui/text_edit.cpp": {
+      "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
+      "after": "7054cabd6e72b40078c6937e35bda89b64089490faa90eb9870c8da24d181d6d"
+    },
+    "scene/gui/text_edit.h": {
+      "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
+      "after": "229e31cb98ab45fa51f82c762809ee709a57eca62b11ade820730deeabdc2e48"
+    }
+  }
+}
