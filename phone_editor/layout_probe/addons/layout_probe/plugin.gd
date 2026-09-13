@@ -48,6 +48,11 @@ func _press_text_tool(editor: Control, name: String) -> void:
 	var tools := editor.find_child("PhoneCodeTools", true, false) as ScrollContainer
 	tools.ensure_control_visible(button)
 	await _settle(8)
+	_inside_window(button, name)
+	_expect(tools.get_global_rect().grow(2).encloses(button.get_global_rect()), name + " is clipped by the toolbar")
+	var hits := [0]
+	var record_press := func(): hits[0] += 1
+	button.pressed.connect(record_press)
 	var point := button.get_global_rect().get_center()
 	for pressed in [true, false]:
 		var click := InputEventMouseButton.new()
@@ -57,6 +62,8 @@ func _press_text_tool(editor: Control, name: String) -> void:
 		click.global_position = point
 		Input.parse_input_event(click)
 		await _settle(3)
+	button.pressed.disconnect(record_press)
+	_expect(hits[0] == 1, name + " did not receive exactly one real click")
 
 func _test_text_tools(base: Control, output: String) -> void:
 	_mark("text_actions")
@@ -81,6 +88,22 @@ func _test_text_tools(base: Control, output: String) -> void:
 		return
 	_inside_window(code, "code editor")
 	_inside_window(tools, "code tools")
+	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Less than half the window remains for code in compact mode")
+	var navigation := base.find_child("PhoneNavigation", true, false) as Control
+	_expect(not navigation.is_visible_in_tree(), "Code mode did not collapse navigation")
+	await _press_text_tool(editor, "PhonePanels")
+	_expect(navigation.is_visible_in_tree(), "Panels command did not restore navigation")
+	_inside_window(navigation, "restored navigation")
+	_inside_window(code, "code with panels")
+	await _press_text_tool(editor, "PhonePanels")
+	_expect(not navigation.is_visible_in_tree(), "Panels command did not return to code mode")
+	var scripts := base.find_child("PhoneScriptList", true, false) as Control
+	await _press_text_tool(editor, "PhoneScripts")
+	_expect(scripts.is_visible_in_tree(), "Scripts command did not open the native list")
+	_inside_window(scripts, "script list")
+	_inside_window(code, "code with script list")
+	await _press_text_tool(editor, "PhoneScripts")
+	_expect(not scripts.is_visible_in_tree(), "Scripts command did not close the native list")
 	var original := code.text
 	code.text = ""
 	code.grab_focus()
@@ -155,6 +178,10 @@ func _test_text_tools(base: Control, output: String) -> void:
 	RenderingServer.force_draw(false)
 	_expect(get_viewport().get_texture().get_image().save_png(output.path_join("code-actions.png")) == OK, "Could not save code toolbar screenshot")
 	observations.append({"control": "text_actions", "scope": "Real mouse clicks on the native CodeEdit toolbar; clipboard, line replacement, undo, redo, selection and reading drag"})
+	EditorInterface.set_main_screen_editor("3D")
+	await _settle()
+	_expect(navigation.is_visible_in_tree(), "Leaving Script did not restore navigation")
+	_expect((base.find_child("PhoneTopBarScroll", true, false) as Control).is_visible_in_tree(), "Leaving Script did not restore main menu")
 
 func _run_probe() -> void:
 	_mark("waiting_for_initial_frames")
@@ -177,6 +204,9 @@ func _run_probe() -> void:
 		return
 
 	var base: Control = EditorInterface.get_base_control()
+	# Begin geometry checks in the scene workspace even if a prior test saved Script.
+	EditorInterface.set_main_screen_editor("3D")
+	await _settle()
 	var panels := base.find_child("PhonePanels", true, false) as Control
 	var navigation := base.find_child("PhoneNavigation", true, false) as Control
 	var workspace := base.find_child("PhoneWorkspace", true, false) as Control
