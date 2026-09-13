@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="BoxMesh" id="Box"]
+
+[node name="LayoutProbe" type="Node3D"]
+
+[node name="Box" type="MeshInstance3D" parent="."]
+mesh = SubResource("Box")

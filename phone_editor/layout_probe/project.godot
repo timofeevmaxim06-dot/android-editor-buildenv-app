@@ -1,0 +1,12 @@
+config_version=5
+
+[application]
+config/name="Phone Layout Regression"
+run/main_scene="res://probe.tscn"
+
+[editor_plugins]
+enabled=PackedStringArray("res://addons/layout_probe/plugin.cfg")
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

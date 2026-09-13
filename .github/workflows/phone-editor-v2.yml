@@ -1,0 +1,185 @@
+name: Godot Phone Preview 2
+
+on:
+  push:
+    branches: [phone-editor-preview2-20260913]
+    paths:
+      - 'phone_editor/**'
+      - '.github/workflows/phone-editor-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-editor-preview-2
+  cancel-in-progress: false
+
+jobs:
+  layout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout isolated build recipe
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: recipe
+          persist-credentials: false
+      - name: Checkout pinned Godot 4.7.2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: godotengine/godot
+          ref: ed1daf0bf001b61586d9930840f2f1394092c079
+          path: godot
+          persist-credentials: false
+      - name: Validate and apply candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p layout-evidence
+          test "$(git -C godot rev-parse HEAD)" = ed1daf0bf001b61586d9930840f2f1394092c079
+          python recipe/phone_editor/test_mobile_patch_v2.py godot 2>&1 | tee layout-evidence/source-tests.txt
+          python recipe/phone_editor/apply_mobile_patch_v2.py godot > layout-evidence/patch-manifest.json
+          git -C godot diff --check
+      - name: Install Linux geometry test prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgl1-mesa-dev libasound2-dev libudev-dev libpulse-dev xvfb xauth libgl1-mesa-dri
+          pip install scons==4.8.1
+      - name: Compile shared editor layout code
+        working-directory: godot
+        run: scons platform=linuxbsd target=editor arch=x86_64 optimize=none debug_symbols=no vulkan=no wayland=no accesskit=no dbus=no speechd=no -j2
+      - name: Exercise real dock layout in Russian at 150 and 200 percent
+        shell: bash
+        run: |
+          set -euo pipefail
+          phone_editor_bin="$GITHUB_WORKSPACE/godot/bin/godot.linuxbsd.editor.x86_64"
+          test -x "$phone_editor_bin"
+          for phone_scale in 1.5 2.0; do
+            export XDG_CONFIG_HOME="$RUNNER_TEMP/phone-config-$phone_scale"
+            export XDG_DATA_HOME="$RUNNER_TEMP/phone-data-$phone_scale"
+            export XDG_CACHE_HOME="$RUNNER_TEMP/phone-cache-$phone_scale"
+            export PHONE_LAYOUT_SCALE="$phone_scale"
+            export PHONE_LAYOUT_OUTPUT="$GITHUB_WORKSPACE/layout-evidence/scale-$phone_scale"
+            mkdir -p "$PHONE_LAYOUT_OUTPUT"
+            PHONE_LAYOUT_BOOTSTRAP=1 timeout 120 "$phone_editor_bin" --headless --editor --path recipe/phone_editor/layout_probe 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/bootstrap.log"
+            LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x1440x24' timeout 180 "$phone_editor_bin" --editor --single-window --rendering-method gl_compatibility --rendering-driver opengl3 --display-driver x11 --path recipe/phone_editor/layout_probe 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/runtime.log"
+            python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert not r["failures"], r["failures"]; assert len(r["observations"]) >= 24' "$PHONE_LAYOUT_OUTPUT/geometry.json"
+          done
+      - name: Preserve real UI captures and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: godot-phone-preview-2-layout
+          path: layout-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+  editor:
+    needs: layout
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout isolated build recipe
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: recipe
+          persist-credentials: false
+      - name: Checkout pinned Godot 4.7.2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: godotengine/godot
+          ref: ed1daf0bf001b61586d9930840f2f1394092c079
+          path: godot
+          persist-credentials: false
+      - name: Verify base and patch contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C godot rev-parse HEAD)" = ed1daf0bf001b61586d9930840f2f1394092c079
+          mkdir -p evidence
+          python recipe/phone_editor/test_mobile_patch_v2.py godot 2>&1 | tee evidence/source-tests.txt
+          python recipe/phone_editor/apply_mobile_patch_v2.py godot | tee evidence/patch-manifest.json
+          git -C godot diff --check
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-2.patch
+          cp recipe/phone_editor/README-v2.md evidence/README.md
+          git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
+          git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
+      - name: Download exact JDK with checksum verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/phone-jdk.tar.gz" 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz'
+          printf '3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e  %s\n' "$RUNNER_TEMP/phone-jdk.tar.gz" | sha256sum --check --strict
+      - name: Set up verified JDK archive
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: jdkfile
+          java-version: '17'
+          jdkFile: ${{ runner.temp }}/phone-jdk.tar.gz
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
+      - name: Install fixed build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.1.0' 'ndk;29.0.14206865'
+          pip install scons==4.8.1
+          {
+            java -version
+            javac -version
+            scons --version
+            uname -a
+            printenv ImageOS ImageVersion
+            cat "$ANDROID_HOME/ndk/29.0.14206865/source.properties"
+            cat "$ANDROID_HOME/build-tools/36.1.0/source.properties"
+          } > evidence/toolchain.txt 2>&1
+      - name: Install upstream frame pacing library
+        working-directory: godot
+        run: python misc/scripts/install_swappy_android.py
+      - name: Record frame pacing dependency
+        run: sha256sum godot/thirdparty/swappy-frame-pacing/*/libswappy_static.a > evidence/SWAPPY-SHA256.txt
+      - name: Compile ARM64 editor
+        working-directory: godot
+        run: scons platform=android target=editor arch=arm64 production=yes -j2
+      - name: Package test-signed editor
+        working-directory: godot/platform/android/java
+        run: ./gradlew generateGodotEditor --no-daemon
+      - name: Verify APK identity, signature and alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          phone_apks=(godot/bin/android_editor_builds/*.apk)
+          test "${#phone_apks[@]}" -gt 0
+          mkdir -p deliverables
+          for phone_apk in "${phone_apks[@]}"; do
+            phone_name=$(basename "$phone_apk")
+            phone_id=$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$phone_apk")
+            case "$phone_id" in
+              org.godotengine.editor.v4.phonepreview2.debug|org.godotengine.editor.v4.phonepreview2.release) ;;
+              *) echo 'Unexpected application ID; refusing artifact'; exit 1 ;;
+            esac
+            "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose --print-certs "$phone_apk" > "evidence/$phone_name-signature.txt"
+            "$ANDROID_HOME/build-tools/36.1.0/zipalign" -c -P 16 4 "$phone_apk" > "evidence/$phone_name-alignment.txt"
+            python recipe/phone_editor/verify_apk.py "$phone_apk" > "evidence/$phone_name-contents.json"
+            printf '%s %s\n' "$phone_id" "$phone_name" >> evidence/APPLICATION-IDS.txt
+            cp "$phone_apk" deliverables/
+          done
+          (cd deliverables && sha256sum *.apk) > evidence/APK-SHA256.txt
+          cp evidence/APK-SHA256.txt deliverables/
+          cp recipe/phone_editor/README-v2.md deliverables/
+      - name: Upload APK only after verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: godot-phone-preview-2-apk
+          path: deliverables/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve checks and patch even on build failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: godot-phone-preview-2-evidence
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
