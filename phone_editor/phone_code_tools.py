@@ -6,7 +6,7 @@ def add_edits(replace):
     source = "editor/gui/code_editor.cpp"
     script = "editor/script/script_editor_plugin.cpp"
     script_header = "editor/script/script_editor_plugin.h"
-    replace(source, '#include "code_editor.h"', '#include "code_editor.h"\n#include "editor/script/script_editor_plugin.h"')
+    replace(source, '#include "code_editor.h"', '#include "code_editor.h"\n#include "editor/script/script_editor_plugin.h"\n#include "servers/display/display_server.h"')
     replace(script, '#include "scene/gui/separator.h"', '#include "scene/gui/separator.h"\n#include "scene/gui/scroll_container.h"')
     replace(script_header, "\tbool restoring_layout;", """
 	bool restoring_layout;
