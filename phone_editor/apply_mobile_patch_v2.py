@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 import apply_mobile_patch as v1
+import phone_code_tools
 
 GODOT_COMMIT = v1.GODOT_COMMIT
 APP_ID = "org.godotengine.editor.v4.phonepreview2"
@@ -86,6 +87,21 @@ replace(NODE, '#include "editor_node.h"', '#include "editor_node.h"\n\n#include 
 for path, old, new in v1.EDITS:
     if path == NODE and 'phone_top_scroll' in new:
         replace(path, old, new.replace('phone_scrollable_top_bar', 'phone_single_panel_mode'))
+replace(NODE, "\ttitle_bar = memnew(EditorTitleBar);\n\tmain_vbox->add_child(title_bar);", """
+	title_bar = memnew(EditorTitleBar);
+	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
+		// Exercise the same scrollable phone chrome in the desktop runtime test.
+		ScrollContainer *phone_top_scroll = memnew(ScrollContainer);
+		phone_top_scroll->set_name("PhoneTopBarScroll");
+		phone_top_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
+		phone_top_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
+		main_vbox->add_child(phone_top_scroll);
+		phone_top_scroll->add_child(title_bar);
+	} else {
+		main_vbox->add_child(title_bar);
+	}
+""")
 replace(NODE, "\t\tconst Size2 minimum_size = Size2(1024, 600) * EDSCALE;", """		// A desktop-sized forced window is larger than a phone's drawable area.
 		const bool phone_mode = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
 		const Size2 minimum_size = phone_mode ? Size2(360, 240) : Size2(1024, 600) * EDSCALE;""")
@@ -151,6 +167,43 @@ MAIN_SCREEN = "editor/editor_main_screen.cpp"
 replace(MAIN_SCREEN, '#include "editor/editor_node.h"', '#include "editor/editor_node.h"\n#include "editor/docks/editor_dock_manager.h"')
 replace(MAIN_SCREEN, "\ttb->connect(SceneStringName(pressed), callable_mp(this, &EditorMainScreen::select).bind(buttons.size()));", """	tb->connect(SceneStringName(pressed), callable_mp(this, &EditorMainScreen::select).bind(buttons.size()));
 	tb->connect(SceneStringName(pressed), callable_mp(EditorDockManager::get_singleton(), &EditorDockManager::show_phone_workspace).bind(true));""")
+
+
+# Run the Android chrome tree, including its action strip, in the desktop
+# phone-layout test too. Desktop mode without the setting keeps its old tree.
+replace(NODE, '#ifdef ANDROID_ENABLED\n#include "editor/gui/touch_actions_panel.h"\n#endif // ANDROID_ENABLED', '#include "editor/gui/touch_actions_panel.h"')
+replace("editor/editor_node.h", "#ifdef ANDROID_ENABLED\n\tVBoxContainer *base_vbox", "\tVBoxContainer *base_vbox")
+replace("editor/editor_node.h", "\tvoid _touch_actions_panel_mode_changed();\n#endif", "\tvoid _touch_actions_panel_mode_changed();")
+replace("editor/editor_node.h", "#ifdef ANDROID_ENABLED\nclass TouchActionsPanel;\n#endif", "class TouchActionsPanel;")
+replace(NODE, "#ifdef ANDROID_ENABLED\nvoid EditorNode::_touch_actions_panel_mode_changed()", "void EditorNode::_touch_actions_panel_mode_changed()")
+replace(NODE, '\n#endif\n\n#ifdef MACOS_ENABLED\nextern "C" GameViewPluginBase', '\n\n#ifdef MACOS_ENABLED\nextern "C" GameViewPluginBase')
+replace(NODE, "#ifdef ANDROID_ENABLED\n\tbase_vbox = memnew(VBoxContainer);", """
+#ifdef ANDROID_ENABLED
+	const bool use_phone_chrome = true;
+#else
+	const bool use_phone_chrome = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
+#endif
+	if (use_phone_chrome) {
+	base_vbox = memnew(VBoxContainer);""")
+replace(NODE, "\tgui_base->add_child(base_vbox);\n#else", "\tgui_base->add_child(base_vbox);\n\t} else {")
+replace(NODE, "\n#endif\n\n\tDockSplitContainer *main_vsplit", "\n\t}\n\n\tDockSplitContainer *main_vsplit")
+
+TOUCH = "editor/gui/touch_actions_panel.cpp"
+replace(TOUCH, '#include "scene/gui/texture_rect.h"', '#include "scene/gui/texture_rect.h"\n#include "scene/gui/scroll_container.h"')
+replace(TOUCH, "\tadd_child(box);", """
+	if (!is_floating && (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
+		ScrollContainer *scroll = memnew(ScrollContainer);
+		scroll->set_name("PhoneTouchActionsScroll");
+		scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
+		scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
+		add_child(scroll);
+		scroll->add_child(box);
+	} else {
+		add_child(box);
+	}
+""")
+
+phone_code_tools.add_edits(replace)
 
 
 def prepare(root):

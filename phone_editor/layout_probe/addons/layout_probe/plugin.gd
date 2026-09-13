@@ -40,6 +40,118 @@ func _dump_widths(node: Node, threshold: float) -> void:
 	for child in node.get_children(true):
 		_dump_widths(child, threshold)
 
+func _press_text_tool(editor: Control, name: String) -> void:
+	var button := editor.find_child(name, true, false) as Button
+	if button == null:
+		_expect(false, "Missing text action " + name)
+		return
+	var tools := editor.find_child("PhoneCodeTools", true, false) as ScrollContainer
+	tools.ensure_control_visible(button)
+	await _settle(8)
+	var point := button.get_global_rect().get_center()
+	for pressed in [true, false]:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = pressed
+		click.position = point
+		click.global_position = point
+		Input.parse_input_event(click)
+		await _settle(3)
+
+func _test_text_tools(base: Control, output: String) -> void:
+	_mark("text_actions")
+	EditorInterface.edit_script(load("res://phone_text_fixture.gd"), 0, 0, true)
+	await _settle(45)
+	var current := EditorInterface.get_script_editor().get_current_editor()
+	if current == null:
+		_expect(false, "No script editor opened for text actions")
+		return
+	var code := current.get_base_editor() as CodeEdit
+	if code == null:
+		_expect(false, "Script editor did not provide CodeEdit")
+		return
+	var editor := code.get_parent() as Control
+	var tools := editor.find_child("PhoneCodeTools", true, false) as ScrollContainer
+	if tools == null:
+		_expect(false, "Phone code tools were not created")
+		return
+	_inside_window(code, "code editor")
+	_inside_window(tools, "code tools")
+	var original := code.text
+	code.text = ""
+	code.grab_focus()
+	var pasted := "var имя = 7\nvar text = \"Привет, мир 😀\""
+	DisplayServer.clipboard_set(pasted)
+	await _press_text_tool(editor, "PhonePaste")
+	_expect(code.text == pasted, "Unicode multiline clipboard paste changed text")
+	_expect(code.has_focus(), "Paste button stole keyboard focus")
+	code.set_caret_line(0)
+	code.set_caret_column(5)
+	await _press_text_tool(editor, "PhoneSelectLine")
+	_expect(code.get_selected_text() == "var имя = 7", "Select line did not select exactly the current line")
+	await _press_text_tool(editor, "PhoneCopy")
+	_expect(DisplayServer.clipboard_get() == "var имя = 7", "Copy did not preserve the selected line")
+	DisplayServer.clipboard_set("var имя = 42")
+	await _press_text_tool(editor, "PhonePaste")
+	_expect(code.get_line(0) == "var имя = 42", "Paste did not replace the selected line")
+	await _press_text_tool(editor, "PhoneUndo")
+	_expect(code.text == pasted, "Undo did not restore text after line replacement")
+	await _press_text_tool(editor, "PhoneRedo")
+	_expect(code.get_line(0) == "var имя = 42", "Redo did not restore the replacement")
+	code.deselect()
+	code.set_caret_line(0)
+	code.set_caret_column(4)
+	await _press_text_tool(editor, "PhoneRight")
+	_expect(code.get_caret_column() == 5, "Right arrow failed to move one Cyrillic character")
+	await _press_text_tool(editor, "PhoneExtendSelection")
+	await _press_text_tool(editor, "PhoneRight")
+	_expect(code.get_selected_text() == "м", "Arrow selection did not select the next character")
+	await _press_text_tool(editor, "PhoneExtendSelection")
+	await _press_text_tool(editor, "PhoneCut")
+	_expect(DisplayServer.clipboard_get() == "м" and code.get_line(0) == "var ия = 42", "Cut did not remove exactly the selection")
+	await _press_text_tool(editor, "PhoneUndo")
+	_expect(code.get_line(0) == "var имя = 42", "Cut could not be undone")
+	code.text = "# строка для прокрутки\n".repeat(200)
+	code.deselect()
+	code.set_caret_line(0)
+	code.set_caret_column(3)
+	code.set_v_scroll(0)
+	await _press_text_tool(editor, "PhoneScrollMode")
+	var surface := code.get_node("PhoneCodeScrollSurface") as Control
+	_expect(surface.is_visible_in_tree(), "Scroll mode did not activate")
+	var before := code.text
+	var start := surface.get_global_rect().get_center()
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = start
+	press.global_position = start
+	Input.parse_input_event(press)
+	await _settle(3)
+	var move := InputEventMouseMotion.new()
+	move.position = start - Vector2(0, 60)
+	move.global_position = move.position
+	move.relative = Vector2(0, -60)
+	move.button_mask = MOUSE_BUTTON_MASK_LEFT
+	Input.parse_input_event(move)
+	await _settle(3)
+	press.pressed = false
+	press.position = move.position
+	press.global_position = move.position
+	Input.parse_input_event(press)
+	await _settle(3)
+	_expect(code.get_v_scroll() > 0, "Reading mode drag did not scroll")
+	_expect(code.text == before and not code.has_selection() and code.get_caret_line() == 0 and code.get_caret_column() == 3, "Reading mode changed code, selection or caret")
+	await _press_text_tool(editor, "PhoneScrollMode")
+	_expect(not surface.is_visible_in_tree(), "Could not return to editing mode")
+	code.text = original
+	code.set_caret_line(0)
+	tools.scroll_horizontal = 0
+	await _settle()
+	RenderingServer.force_draw(false)
+	_expect(get_viewport().get_texture().get_image().save_png(output.path_join("code-actions.png")) == OK, "Could not save code toolbar screenshot")
+	observations.append({"control": "text_actions", "scope": "Real mouse clicks on the native CodeEdit toolbar; clipboard, line replacement, undo, redo, selection and reading drag"})
+
 func _run_probe() -> void:
 	_mark("waiting_for_initial_frames")
 	await _settle(45)
@@ -106,8 +218,9 @@ func _run_probe() -> void:
 			var screenshot_path := output.path_join("%sx%s-%s.png" % [window_size.x, window_size.y, button_name])
 			_expect(screenshot.save_png(screenshot_path) == OK, "Could not save UI screenshot")
 
+	await _test_text_tools(base, output)
 	var report := {"failures": failures, "observations": observations,
-		"scope": "Linux runtime of the shared dock-layout code; Android gestures and Android-specific chrome are not tested"}
+		"scope": "Linux runtime of shared phone chrome and native code actions; Android touch dispatch, system clipboard and IME remain device checks"}
 	var report_file := FileAccess.open(output.path_join("geometry.json"), FileAccess.WRITE)
 	if report_file == null:
 		push_error("Could not write geometry report")
