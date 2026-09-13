@@ -4,6 +4,17 @@
 def add_edits(replace):
     header = "editor/gui/code_editor.h"
     source = "editor/gui/code_editor.cpp"
+    replace("scene/gui/text_edit.h", "\tvoid set_virtual_keyboard_enabled(bool p_enabled);", "\tvoid refresh_virtual_keyboard();\n\tvoid set_virtual_keyboard_enabled(bool p_enabled);")
+    replace("scene/gui/text_edit.cpp", "void TextEdit::_show_virtual_keyboard() {", """
+void TextEdit::refresh_virtual_keyboard() {
+	// Keep native IME text/selection synchronized after an editor toolbar action.
+	// Never open a hidden keyboard or take focus from another field.
+	if (has_focus() && DisplayServer::get_singleton()->virtual_keyboard_get_height() > 0) {
+		_show_virtual_keyboard();
+	}
+}
+
+void TextEdit::_show_virtual_keyboard() {""")
     replace(header, "\tFindReplaceBar *find_replace_bar = nullptr;", """
 	FindReplaceBar *find_replace_bar = nullptr;
 	Control *phone_scroll_surface = nullptr;
@@ -63,6 +74,7 @@ void CodeTextEditor::_phone_scroll_input(const Ref<InputEvent> &p_event) {
 void CodeTextEditor::_phone_text_action(int p_action) {
 	phone_scroll_button->set_pressed(false);
 	text_editor->grab_focus();
+	text_editor->apply_ime();
 	switch (p_action) {
 		case 0: text_editor->paste(); break;
 		case 1: text_editor->copy(); break;
@@ -92,6 +104,9 @@ void CodeTextEditor::_phone_text_action(int p_action) {
 			key->set_shift_pressed(phone_select_button->is_pressed());
 			text_editor->gui_input(key);
 		} break;
+	}
+	if (p_action != 7 && p_action != 8) {
+		text_editor->refresh_virtual_keyboard();
 	}
 }
 
