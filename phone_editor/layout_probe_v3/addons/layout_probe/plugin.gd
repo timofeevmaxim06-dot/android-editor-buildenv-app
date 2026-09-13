@@ -90,7 +90,16 @@ func _test_native_touch(base: Control) -> void:
 	code.deselect()
 	await _settle()
 	var word_rect := code.get_rect_at_line_column(0, 8)
+	_expect(word_rect.position.x >= 0, "Selected test word is outside the drawable code area")
 	var word_point := code.global_position + Vector2(word_rect.get_center())
+	_expect(code.get_word_at_pos(Vector2(word_rect.get_center())) == "beta", "Word target does not map to beta")
+	# Touch selection must use its own coordinates, even with a separate mouse.
+	Input.emulate_mouse_from_touch = false
+	var mouse := InputEventMouseMotion.new()
+	mouse.position = code.global_position + Vector2(code.get_rect_at_line_column(0, 14).get_center())
+	mouse.global_position = mouse.position
+	Input.parse_input_event(mouse)
+	await _settle(3)
 	await _touch(word_point, true)
 	await _touch(word_point, false)
 	await _touch(word_point, true, true)
@@ -346,8 +355,11 @@ func _run_probe() -> void:
 	DirAccess.make_dir_recursive_absolute(output)
 	for window_size in [Vector2i(1920, 864), Vector2i(1536, 691), Vector2i(691, 1536)]:
 		_mark("resize_%s" % window_size)
+		print("PHONE_WINDOW_BEFORE ", get_tree().root.size, " min=", get_tree().root.min_size, " wrapping=", get_tree().root.wrap_controls, " contents=", get_tree().root.get_contents_minimum_size())
 		get_tree().root.size = window_size
+		print("PHONE_WINDOW_REQUESTED ", window_size, " immediate=", get_tree().root.size)
 		await _settle()
+		print("PHONE_WINDOW_SETTLED ", get_tree().root.size, " min=", get_tree().root.min_size, " wrapping=", get_tree().root.wrap_controls, " contents=", get_tree().root.get_contents_minimum_size())
 		_expect(get_tree().root.size == window_size, "Window was enlarged beyond requested drawable size")
 		_dump_widths(base, window_size.x - 100)
 		for button_name in ["2D", "3D", "PhoneDockSceneTreeDock", "PhoneDockFileSystemDock", "PhoneDockInspectorDock", "PhoneDockSignalsDock", "PhoneDockGroupsDock", "PhoneDockImportDock", "PhoneDockHistoryDock"]:

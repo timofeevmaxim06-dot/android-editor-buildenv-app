@@ -52,16 +52,31 @@ jobs:
         with:
           path: godot/bin/godot.linuxbsd.editor.x86_64
           key: phone-layout-linux-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/apply_mobile_patch_v3.py', 'recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json') }}
+      - name: Restore validated SCons object cache
+        if: steps.linux-cache.outputs.cache-hit != 'true'
+        id: linux-objects
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/phone-scons-layout
+          key: phone-layout-objects-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch') }}
+          restore-keys: |
+            phone-layout-objects-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-
       - name: Compile shared editor layout code
         if: steps.linux-cache.outputs.cache-hit != 'true'
         working-directory: godot
-        run: scons platform=linuxbsd target=editor arch=x86_64 optimize=none debug_symbols=no vulkan=no wayland=no accesskit=no dbus=no speechd=no -j2
+        run: scons platform=linuxbsd target=editor arch=x86_64 optimize=none debug_symbols=no vulkan=no wayland=no accesskit=no dbus=no speechd=no cache_path="$RUNNER_TEMP/phone-scons-layout" cache_limit=2 -j2
       - name: Save compiled binary before running UI checks
         if: steps.linux-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: godot/bin/godot.linuxbsd.editor.x86_64
           key: ${{ steps.linux-cache.outputs.cache-primary-key }}
+      - name: Save validated SCons objects for small source fixes
+        if: steps.linux-cache.outputs.cache-hit != 'true' && steps.linux-objects.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/phone-scons-layout
+          key: ${{ steps.linux-objects.outputs.cache-primary-key }}
       - name: Record and preserve compiled editor
         run: |
           sha256sum godot/bin/godot.linuxbsd.editor.x86_64 > layout-evidence/LINUX-BINARY-SHA256.txt
@@ -79,6 +94,7 @@ jobs:
           set -euo pipefail
           phone_editor_bin="$GITHUB_WORKSPACE/godot/bin/godot.linuxbsd.editor.x86_64"
           test -x "$phone_editor_bin"
+          phone_probe_failed=0
           for phone_scale in 1.5 2.0; do
             export XDG_CONFIG_HOME="$RUNNER_TEMP/phone-config-$phone_scale"
             export XDG_DATA_HOME="$RUNNER_TEMP/phone-data-$phone_scale"
@@ -86,10 +102,18 @@ jobs:
             export PHONE_LAYOUT_SCALE="$phone_scale"
             export PHONE_LAYOUT_OUTPUT="$GITHUB_WORKSPACE/layout-evidence/scale-$phone_scale"
             mkdir -p "$PHONE_LAYOUT_OUTPUT"
-            PHONE_LAYOUT_BOOTSTRAP=1 timeout 120 "$phone_editor_bin" --headless --editor --path recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/bootstrap.log"
-            LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/runtime.log"
-            python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert not r["failures"], r["failures"]; assert len(r["observations"]) >= 24' "$PHONE_LAYOUT_OUTPUT/geometry.json"
+            if ! PHONE_LAYOUT_BOOTSTRAP=1 timeout 120 "$phone_editor_bin" --headless --editor --path recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/bootstrap.log"; then
+              phone_probe_failed=1
+              continue
+            fi
+            if ! LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/runtime.log"; then
+              phone_probe_failed=1
+            fi
+            if ! python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert not r["failures"], r["failures"]; assert len(r["observations"]) >= 24' "$PHONE_LAYOUT_OUTPUT/geometry.json"; then
+              phone_probe_failed=1
+            fi
           done
+          exit "$phone_probe_failed"
       - name: Preserve real UI captures and failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

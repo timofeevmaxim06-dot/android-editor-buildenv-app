@@ -308,7 +308,7 @@ index 78ec499..db38de4 100644
  	bool is_button_enabled(int p_index) const;
  
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
-index 5bc4649..74d2be8 100644
+index 5bc4649..07ad3f7 100644
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
 @@ -30,6 +30,9 @@
@@ -347,18 +347,22 @@ index 5bc4649..74d2be8 100644
  
  #ifdef MACOS_ENABLED
  extern "C" GameViewPluginBase *get_game_view_plugin();
-@@ -8479,7 +8478,9 @@ EditorNode::EditorNode() {
+@@ -8479,7 +8478,13 @@ EditorNode::EditorNode() {
  	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
  	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
  	if (w) {
 -		const Size2 minimum_size = Size2(1024, 600) * EDSCALE;
 +		// A desktop-sized forced window is larger than a phone's drawable area.
 +		const bool phone_mode = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
++		if (phone_mode) {
++			// The phone supplies a fixed drawable area; child minima must not enlarge it.
++			w->set_wrap_controls(false);
++		}
 +		const Size2 minimum_size = phone_mode ? Size2(360, 240) : Size2(1024, 600) * EDSCALE;
  		w->set_min_size(minimum_size); // Calling it this early doesn't sync the property with DS.
  		DisplayServer::get_singleton()->window_set_min_size(minimum_size);
  	}
-@@ -8672,12 +8673,28 @@ EditorNode::EditorNode() {
+@@ -8672,12 +8677,28 @@ EditorNode::EditorNode() {
  
  	main_vbox = memnew(VBoxContainer);
  
@@ -388,7 +392,7 @@ index 5bc4649..74d2be8 100644
  
  	main_hbox = memnew(HBoxContainer);
  	main_hbox->add_child(main_vbox);
-@@ -8688,12 +8705,25 @@ EditorNode::EditorNode() {
+@@ -8688,12 +8709,25 @@ EditorNode::EditorNode() {
  	_touch_actions_panel_mode_changed();
  
  	gui_base->add_child(base_vbox);
@@ -417,7 +421,7 @@ index 5bc4649..74d2be8 100644
  
  	DockSplitContainer *main_vsplit = memnew(DockSplitContainer);
  	main_vsplit->set_name("DockVSplitMain");
-@@ -8711,6 +8741,7 @@ EditorNode::EditorNode() {
+@@ -8711,6 +8745,7 @@ EditorNode::EditorNode() {
  	left_l_vsplit->set_vertical(true);
  	main_hsplit->add_child(left_l_vsplit);
  
@@ -425,7 +429,7 @@ index 5bc4649..74d2be8 100644
  	LocalVector<DockTabContainer *> dock_slots;
  	{
  		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
-@@ -8864,6 +8895,49 @@ EditorNode::EditorNode() {
+@@ -8864,6 +8899,49 @@ EditorNode::EditorNode() {
  	srt->add_child(editor_main_screen);
  	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
  
@@ -475,7 +479,7 @@ index 5bc4649..74d2be8 100644
  	scene_root = memnew(SubViewport);
  	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
  	scene_root->set_translation_domain(StringName());
-@@ -9076,8 +9150,13 @@ EditorNode::EditorNode() {
+@@ -9076,8 +9154,13 @@ EditorNode::EditorNode() {
  	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
  	main_editor_button_hb->set_name("EditorMainScreenButtons");
  	editor_main_screen->set_button_container(main_editor_button_hb);
@@ -491,7 +495,7 @@ index 5bc4649..74d2be8 100644
  
  	// Spacer to center 2D / 3D / Script buttons.
  	right_spacer = memnew(Control);
-@@ -9190,6 +9269,7 @@ EditorNode::EditorNode() {
+@@ -9190,6 +9273,7 @@ EditorNode::EditorNode() {
  	history_dock = memnew(HistoryDock);
  	editor_dock_manager->add_dock(history_dock);
  
@@ -527,7 +531,7 @@ index f683e13..be4e03d 100644
  	ConfirmationDialog *video_restart_dialog = nullptr;
  
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..e443cf3 100644
+index aceecca..69f225f 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -671,7 +675,7 @@ index aceecca..e443cf3 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,7 +2065,53 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2065,65 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
@@ -724,7 +728,20 @@ index aceecca..e443cf3 100644
 +
  
  	status_bar = memnew(HBoxContainer);
- 	add_child(status_bar);
+-	add_child(status_bar);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		ScrollContainer *status_scroll = memnew(ScrollContainer);
++		status_scroll->set_name("PhoneCodeStatus");
++		status_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		status_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		add_child(status_scroll);
++		status_scroll->add_child(status_bar);
++	} else {
++		add_child(status_bar);
++	}
+ 	status_bar->set_h_size_flags(SIZE_EXPAND_FILL);
+ 	status_bar->set_custom_minimum_size(Size2(0, 24 * EDSCALE)); // Adjust for the height of the warning icon.
+ 	idle = memnew(Timer);
 diff --git a/editor/gui/code_editor.h b/editor/gui/code_editor.h
 index d624099..9988a32 100644
 --- a/editor/gui/code_editor.h
@@ -1501,7 +1518,7 @@ index 3a607c1..f0fd2c0 100644
  	bool is_code_completion_scroll_hovered = false;
  	bool is_code_completion_scroll_pressed = false;
 diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
-index cd092bd..c487df6 100644
+index cd092bd..53c0c47 100644
 --- a/scene/gui/text_edit.cpp
 +++ b/scene/gui/text_edit.cpp
 @@ -891,7 +891,70 @@ void TextEdit::_notification(int p_what) {
@@ -1671,7 +1688,7 @@ index cd092bd..c487df6 100644
  		Vector2i mpos = mb->get_position();
  		if (is_layout_rtl()) {
  			mpos.x = get_size().x - mpos.x;
-@@ -2507,89 +2640,303 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2507,89 +2640,305 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
  					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
  				}
@@ -1858,7 +1875,9 @@ index cd092bd..c487df6 100644
 +			} else {
 +				// Start double-click select word mode.
 +				set_selection_mode(SelectionMode::SELECTION_MODE_WORD);
-+				_update_selection_mode_word(true);
++				// Native touch arrives before mouse emulation updates its position.
++				_update_selection_mode_word_at_pos(touch_pos, true);
++				click_select_held->stop();
 +			}
 +
 +			// Click inline objects.
@@ -1914,11 +1933,7 @@ index cd092bd..c487df6 100644
 +					if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
 +						DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
 +					}
- 
--			if (drag_caret_index == -1) {
--				// Force create a new caret for drag and drop.
--				carets.push_back(Caret());
--				drag_caret_index = carets.size() - 1;
++
 +					// Avoid showing the virtual keyboard when released on the minimap, or pan gesture performed.
 +					if (editable && !dragging_minimap && !pan_gesture_performed) {
 +						_show_virtual_keyboard();
@@ -1927,12 +1942,8 @@ index cd092bd..c487df6 100644
 +					can_drag_minimap = false;
 +					pan_gesture_performed = false;
 +				}
- 			}
- 
--			drag_caret_force_displayed = true;
--			set_caret_line(pos.y, false, true, -1, drag_caret_index);
--			set_caret_column(pos.x, true, drag_caret_index);
--			dragging_selection = true;
++			}
++
 +			if (touch_dragging_starting || touch_dragging_in_progress) {
 +				if (touch->is_canceled() || drag_speed == Vector2()) {
 +					_cancel_inertial_scroll();
@@ -1949,7 +1960,11 @@ index cd092bd..c487df6 100644
 +	Ref<InputEventScreenDrag> drag = p_gui_input;
 +	if (drag.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		show_selection_handle = true; // Showing selection handle because native touch input is used.
-+
+ 
+-			if (drag_caret_index == -1) {
+-				// Force create a new caret for drag and drop.
+-				carets.push_back(Caret());
+-				drag_caret_index = carets.size() - 1;
 +		if (selection_handle_drag_type != SELECTION_HANDLE_NONE) {
 +			Vector2 corrected_text_pos = drag->get_position() - selection_handle_drag_offset;
 +			Point2i pos = get_line_column_at_pos(corrected_text_pos);
@@ -1959,8 +1974,12 @@ index cd092bd..c487df6 100644
 +				select(get_selection_origin_line(c), get_selection_origin_column(c), pos.y, pos.x, c);
 +			} else {
 +				select(pos.y, pos.x, get_caret_line(c), get_caret_column(c), c);
-+			}
-+
+ 			}
+ 
+-			drag_caret_force_displayed = true;
+-			set_caret_line(pos.y, false, true, -1, drag_caret_index);
+-			set_caret_column(pos.x, true, drag_caret_index);
+-			dragging_selection = true;
 +			accept_event();
 +			return;
 +		}
@@ -2015,11 +2034,11 @@ index cd092bd..c487df6 100644
 +			_scroll_up(-delta, false);
 +		} else {
 +			_scroll_down(delta, false);
- 		}
++		}
 +		h_scroll->set_value(h_scroll->get_value() + pan_delta.x * horizontal_multiplier);
 +		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
 +			accept_event(); // Accept event if scroll changed.
-+		}
+ 		}
 +		queue_accessibility_update();
 +
 +		return;
@@ -2032,7 +2051,7 @@ index cd092bd..c487df6 100644
  	}
  
  	if (draw_minimap && !dragging_selection) {
-@@ -2884,6 +3231,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2884,6 +3233,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  	}
  }
  
@@ -2105,7 +2124,7 @@ index cd092bd..c487df6 100644
  /* Input actions. */
  void TextEdit::_swap_current_input_direction() {
  	if (input_direction == TEXT_DIRECTION_LTR) {
-@@ -3410,6 +3823,10 @@ void TextEdit::_update_theme_item_cache() {
+@@ -3410,6 +3825,10 @@ void TextEdit::_update_theme_item_cache() {
  	if (text.get_line_height() + theme_cache.line_spacing < 1) {
  		WARN_PRINT("Line height is too small, please increase font_size and/or line_spacing");
  	}
@@ -2116,7 +2135,7 @@ index cd092bd..c487df6 100644
  }
  
  void TextEdit::_update_caches(bool p_invalidate_all) {
-@@ -3491,6 +3908,15 @@ void TextEdit::_update_ime_text() {
+@@ -3491,6 +3910,15 @@ void TextEdit::_update_ime_text() {
  	queue_redraw();
  }
  
@@ -2132,7 +2151,7 @@ index cd092bd..c487df6 100644
  void TextEdit::_show_virtual_keyboard() {
  	_update_ime_window_position();
  
-@@ -6378,6 +6804,14 @@ void TextEdit::delete_selection(int p_caret) {
+@@ -6378,6 +6806,14 @@ void TextEdit::delete_selection(int p_caret) {
  	end_complex_operation();
  }
  
@@ -2147,7 +2166,7 @@ index cd092bd..c487df6 100644
  /* Line wrapping. */
  void TextEdit::set_line_wrapping_mode(LineWrappingMode p_wrapping_mode) {
  	if (line_wrapping_mode != p_wrapping_mode) {
-@@ -7463,6 +7897,9 @@ void TextEdit::_bind_methods() {
+@@ -7463,6 +7899,9 @@ void TextEdit::_bind_methods() {
  	ClassDB::bind_method(D_METHOD("deselect", "caret_index"), &TextEdit::deselect, DEFVAL(-1));
  	ClassDB::bind_method(D_METHOD("delete_selection", "caret_index"), &TextEdit::delete_selection, DEFVAL(-1));
  
@@ -2157,7 +2176,7 @@ index cd092bd..c487df6 100644
  	/* Line wrapping. */
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_NONE);
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_BOUNDARY);
-@@ -7625,6 +8062,7 @@ void TextEdit::_bind_methods() {
+@@ -7625,6 +8064,7 @@ void TextEdit::_bind_methods() {
  	ADD_PROPERTY(PropertyInfo(Variant::INT, "autowrap_mode", PROPERTY_HINT_ENUM, "Arbitrary:1,Word:2,Word (Smart):3"), "set_autowrap_mode", "get_autowrap_mode");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "indent_wrapped_lines"), "set_indent_wrapped_lines", "is_indent_wrapped_lines");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tab_input_mode"), "set_tab_input_mode", "get_tab_input_mode");
@@ -2165,11 +2184,26 @@ index cd092bd..c487df6 100644
  
  	ADD_GROUP("Virtual Keyboard", "virtual_keyboard_");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_keyboard_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_virtual_keyboard_enabled", "is_virtual_keyboard_enabled");
+@@ -8508,9 +8948,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
+ }
+ 
+ void TextEdit::_update_selection_mode_word(bool p_initial) {
++	_update_selection_mode_word_at_pos(get_local_mouse_pos(), p_initial);
++}
++
++void TextEdit::_update_selection_mode_word_at_pos(const Point2 &p_pos, bool p_initial) {
+ 	dragging_selection = true;
+ 
+-	Point2i pos = get_line_column_at_pos(get_local_mouse_pos());
++	Point2i pos = get_line_column_at_pos(p_pos);
+ 	int line = pos.y;
+ 	int column = pos.x;
+ 	int caret_index = get_caret_count() - 1;
 diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
-index 8470ccc..fa9e305 100644
+index 8470ccc..774b70d 100644
 --- a/scene/gui/text_edit.h
 +++ b/scene/gui/text_edit.h
-@@ -510,6 +510,36 @@ private:
+@@ -510,11 +510,42 @@ private:
  	uint64_t last_dblclk = 0;
  	Vector2 last_dblclk_pos;
  
@@ -2206,7 +2240,13 @@ index 8470ccc..fa9e305 100644
  	void _selection_changed(int p_caret = -1);
  	void _click_selection_held();
  
-@@ -840,6 +870,7 @@ public:
+ 	void _update_selection_mode_pointer(bool p_initial = false);
+ 	void _update_selection_mode_word(bool p_initial = false);
++	void _update_selection_mode_word_at_pos(const Point2 &p_pos, bool p_initial);
+ 	void _update_selection_mode_line(bool p_initial = false);
+ 
+ 	void _pre_shift_selection(int p_caret);
+@@ -840,6 +871,7 @@ public:
  	void set_shortcut_keys_enabled(bool p_enabled);
  	bool is_shortcut_keys_enabled() const;
  
@@ -2214,7 +2254,7 @@ index 8470ccc..fa9e305 100644
  	void set_virtual_keyboard_enabled(bool p_enabled);
  	bool is_virtual_keyboard_enabled() const;
  
-@@ -1040,6 +1071,9 @@ public:
+@@ -1040,6 +1072,9 @@ public:
  	void deselect(int p_caret = -1);
  	void delete_selection(int p_caret = -1);
  

@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "aceea1b195b190d044e7e29d862df2491306cfcdd0d754bb40f9ba3c78683e57",
+  "patch_sha256": "2466795273947e57cd789f02b4e27b216075c571f55242e91a2adfaabf662a42",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -28,7 +28,7 @@
     },
     "editor/editor_node.cpp": {
       "before": "ca8e106bffb9501c82cacc196075dfa968a7b9a44130bb84af357202215e3ca6",
-      "after": "8a3123f130d4ba4fc42ee45e3303f6da98e59013bffdfb99ffc1d126033046a8"
+      "after": "00a1ad2888dd3d9a4fb2db743a7ececeabb1f32668b5861d050376223dd3eeff"
     },
     "editor/editor_node.h": {
       "before": "ed18ed39b5f1f036128cc7e7fa6a79056cddbbc6a09cb7dea79a9e61df68a1d6",
@@ -36,7 +36,7 @@
     },
     "editor/gui/code_editor.cpp": {
       "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
-      "after": "3bfd5cac01385c3fa2e9e52fb8f003b20cb45a6dbb98cdba2409b33334a53b4c"
+      "after": "e7973dbcf9bea826b5d049a1221579edbea25be2dd020fe414786e4b73ac69a9"
     },
     "editor/gui/code_editor.h": {
       "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
@@ -120,11 +120,11 @@
     },
     "scene/gui/text_edit.cpp": {
       "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
-      "after": "7054cabd6e72b40078c6937e35bda89b64089490faa90eb9870c8da24d181d6d"
+      "after": "fdc27c25a1a4b2e4611aa774284734edf66120754c4349fb5007a839db90287e"
     },
     "scene/gui/text_edit.h": {
       "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
-      "after": "229e31cb98ab45fa51f82c762809ee709a57eca62b11ade820730deeabdc2e48"
+      "after": "f724c2abd81bf5e64b94136bdb77b938e5484e808c8cde0407070e74c38a3e0e"
     }
   }
 }
