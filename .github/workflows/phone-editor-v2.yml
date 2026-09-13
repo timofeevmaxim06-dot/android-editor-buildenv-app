@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: phone-editor-preview-2
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   layout:

@@ -60,6 +60,9 @@ func _press_text_tool(editor: Control, name: String) -> void:
 
 func _test_text_tools(base: Control, output: String) -> void:
 	_mark("text_actions")
+	# Match the documented explicit return from the Inspector to the workspace.
+	(base.find_child("PhoneWorkspaceButton", true, false) as Button).emit_signal("pressed")
+	EditorInterface.set_main_screen_editor("Script")
 	EditorInterface.edit_script(load("res://phone_text_fixture.gd"), 0, 0, true)
 	await _settle(45)
 	var current := EditorInterface.get_script_editor().get_current_editor()
@@ -71,6 +74,7 @@ func _test_text_tools(base: Control, output: String) -> void:
 		_expect(false, "Script editor did not provide CodeEdit")
 		return
 	var editor := code.get_parent() as Control
+	_expect(code.is_visible_in_tree(), "Code editor is hidden during text action checks")
 	var tools := editor.find_child("PhoneCodeTools", true, false) as ScrollContainer
 	if tools == null:
 		_expect(false, "Phone code tools were not created")
