@@ -207,9 +207,13 @@ func _run_probe() -> void:
 	# Begin geometry checks in the scene workspace even if a prior test saved Script.
 	EditorInterface.set_main_screen_editor("3D")
 	await _settle()
-	var panels := base.find_child("PhonePanels", true, false) as Control
 	var navigation := base.find_child("PhoneNavigation", true, false) as Control
 	var workspace := base.find_child("PhoneWorkspace", true, false) as Control
+	# The code toolbar also contains a PhonePanels button after reopening Script.
+	# Dock panels are the workspace's sibling, never a recursive name match.
+	var panels: VBoxContainer = null
+	if workspace != null:
+		panels = workspace.get_node_or_null("../PhonePanels") as VBoxContainer
 	if panels == null or navigation == null or workspace == null:
 		push_error("Phone layout was not constructed")
 		get_tree().quit(1)
@@ -240,11 +244,17 @@ func _run_probe() -> void:
 			_inside_window(active, button_name + " area")
 			_expect(active.size.y >= window_size.y * 0.5, "Less than half the height remains for " + button_name)
 			if not show_workspace:
-				var tabs := panels.get_child(0) as TabContainer
-				var dock := tabs.get_current_tab_control()
-				_inside_window(dock, button_name + " dock")
-				var expected := {"PhoneSceneButton": "SceneTreeDock", "PhoneFilesButton": "FileSystemDock", "PhoneInspectorButton": "InspectorDock"}
-				_expect(dock.is_class(expected[button_name]), "Wrong native dock selected by " + button_name)
+				var tabs: TabContainer = null
+				if panels.get_child_count() > 0:
+					tabs = panels.get_child(0) as TabContainer
+				_expect(tabs != null, "Native dock tab container is missing after " + button_name)
+				if tabs != null:
+					var dock := tabs.get_current_tab_control()
+					_expect(dock != null, "No native dock selected after " + button_name)
+					if dock != null:
+						_inside_window(dock, button_name + " dock")
+						var expected := {"PhoneSceneButton": "SceneTreeDock", "PhoneFilesButton": "FileSystemDock", "PhoneInspectorButton": "InspectorDock"}
+						_expect(dock.is_class(expected[button_name]), "Wrong native dock selected by " + button_name)
 			# Force a frame: an idle editor may have no next redraw to await.
 			_mark("capture_%s_%s" % [window_size, button_name])
 			RenderingServer.force_draw(false)
