@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "2466795273947e57cd789f02b4e27b216075c571f55242e91a2adfaabf662a42",
+  "patch_sha256": "aeba152a2d30a5006172dc72c8d8fd1d2be7c48f7eaba615242b090821a7b734",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -60,7 +60,7 @@
     },
     "editor/script/script_editor_plugin.cpp": {
       "before": "18e0bac3f5fa7c2fe8117907af86282b92855d283ae6ab79b6a0587a87560947",
-      "after": "67ab9f38c36c2a0293af5715fc447ab13f3daf92df98a4ab528dc67cd051ad8a"
+      "after": "49197601989308b422892013889198014b88b9b63bcb0de5e89093680360c7bb"
     },
     "editor/script/script_editor_plugin.h": {
       "before": "3d21d4d18c7378937d0e87b24bd14f5b919ab8a6fd66d3776874c0558c1cf1bb",
@@ -120,11 +120,11 @@
     },
     "scene/gui/text_edit.cpp": {
       "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
-      "after": "fdc27c25a1a4b2e4611aa774284734edf66120754c4349fb5007a839db90287e"
+      "after": "f161e3ee40a19856464b77033bf8553f3805c76cb94a0f0855817d3d483a4a29"
     },
     "scene/gui/text_edit.h": {
       "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
-      "after": "f724c2abd81bf5e64b94136bdb77b938e5484e808c8cde0407070e74c38a3e0e"
+      "after": "dfe2bd411619a3e608d76303faad7872f2988fa4f5595957be0abce1f8d1815a"
     }
   }
 }

@@ -885,7 +885,7 @@ index c939e3a..ab41ca5 100644
  	main_flow->add_child(main_menu_hbox);
  
 diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
-index 0e60dde..6b686aa 100644
+index 0e60dde..c73c219 100644
 --- a/editor/script/script_editor_plugin.cpp
 +++ b/editor/script/script_editor_plugin.cpp
 @@ -75,6 +75,7 @@
@@ -896,7 +896,7 @@ index 0e60dde..6b686aa 100644
  #include "scene/gui/tab_container.h"
  #include "scene/gui/texture_rect.h"
  #include "scene/main/node.h"
-@@ -996,9 +997,53 @@ TypedArray<Script> ScriptEditor::_get_open_scripts() const {
+@@ -996,9 +997,58 @@ TypedArray<Script> ScriptEditor::_get_open_scripts() const {
  	return ret;
  }
  
@@ -917,10 +917,15 @@ index 0e60dde..6b686aa 100644
 +	// Help tabs have no code toolbar, so they must retain the normal navigation.
 +	const bool compact = is_visible_in_tree() && Object::cast_to<TextEditorBase>(_get_current_editor()) && (phone_compact || keyboard_visible);
 +	if (compact) {
++		Control *code_status = nullptr;
++		if (CodeTextEditor *code_editor = Object::cast_to<TextEditorBase>(_get_current_editor())->get_code_editor()) {
++			code_status = Object::cast_to<Control>(code_editor->find_child("PhoneCodeStatus", true, false));
++		}
 +		Control *base = EditorNode::get_singleton()->get_gui_base();
 +		Control *chrome[] = {
 +			Object::cast_to<Control>(base->find_child("PhoneTopBarScroll", true, false)),
 +			EditorSceneTabs::get_singleton(),
++			code_status,
 +		};
 +		for (Control *control : chrome) {
 +			if (control) {
@@ -951,7 +956,7 @@ index 0e60dde..6b686aa 100644
  	return list_split->is_visible();
  }
  
-@@ -1424,6 +1469,7 @@ void ScriptEditor::_file_menu_closed() {
+@@ -1424,6 +1474,7 @@ void ScriptEditor::_file_menu_closed() {
  }
  
  void ScriptEditor::_tab_changed(int p_which) {
@@ -959,7 +964,7 @@ index 0e60dde..6b686aa 100644
  	ensure_select_current();
  }
  
-@@ -1515,11 +1561,15 @@ void ScriptEditor::_notification(int p_what) {
+@@ -1515,11 +1566,15 @@ void ScriptEditor::_notification(int p_what) {
  #endif
  		} break;
  
@@ -976,7 +981,7 @@ index 0e60dde..6b686aa 100644
  		case NOTIFICATION_PROCESS: {
  			const int kb_height = DisplayServer::get_singleton()->virtual_keyboard_get_height();
  			if (kb_height == last_kb_height) {
-@@ -1553,8 +1603,14 @@ void ScriptEditor::_notification(int p_what) {
+@@ -1553,8 +1608,14 @@ void ScriptEditor::_notification(int p_what) {
  			}
  
  			virtual_keyboard_spacer->set_custom_minimum_size(Size2(0, spacer_height));
@@ -993,7 +998,7 @@ index 0e60dde..6b686aa 100644
  		} break;
  #endif
  		case NOTIFICATION_APPLICATION_FOCUS_IN: {
-@@ -3824,8 +3880,20 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3824,8 +3885,20 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	VBoxContainer *main_container = memnew(VBoxContainer);
  	add_child(main_container);
  
@@ -1015,7 +1020,7 @@ index 0e60dde..6b686aa 100644
  
  	script_split = memnew(HSplitContainer);
  	main_container->add_child(script_split);
-@@ -3857,7 +3925,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3857,7 +3930,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	_sort_list_on_update = true;
  	script_list = memnew(ItemList);
  	script_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
@@ -1024,7 +1029,7 @@ index 0e60dde..6b686aa 100644
  	script_list->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_list->set_theme_type_variation("ItemListSecondary");
  	script_split->set_split_offset(200 * EDSCALE);
-@@ -3875,7 +3943,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3875,7 +3948,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->set_v_size_flags(SIZE_EXPAND_FILL);
  
  	list_split->add_child(overview_vbox);
@@ -1037,7 +1042,7 @@ index 0e60dde..6b686aa 100644
  	buttons_hbox = memnew(HBoxContainer);
  	overview_vbox->add_child(buttons_hbox);
  
-@@ -3901,7 +3973,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3901,7 +3978,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->add_child(members_overview);
  
  	members_overview->set_allow_reselect(true);
@@ -1046,7 +1051,7 @@ index 0e60dde..6b686aa 100644
  	members_overview->set_v_size_flags(SIZE_EXPAND_FILL);
  	members_overview->set_allow_rmb_select(true);
  
-@@ -3910,7 +3982,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3910,7 +3987,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	help_overview->set_theme_type_variation("ItemListSecondary");
  	overview_vbox->add_child(help_overview);
  	help_overview->set_allow_reselect(true);
@@ -1518,7 +1523,7 @@ index 3a607c1..f0fd2c0 100644
  	bool is_code_completion_scroll_hovered = false;
  	bool is_code_completion_scroll_pressed = false;
 diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
-index cd092bd..53c0c47 100644
+index cd092bd..57b124e 100644
 --- a/scene/gui/text_edit.cpp
 +++ b/scene/gui/text_edit.cpp
 @@ -891,7 +891,70 @@ void TextEdit::_notification(int p_what) {
@@ -1688,6 +1693,15 @@ index cd092bd..53c0c47 100644
  		Vector2i mpos = mb->get_position();
  		if (is_layout_rtl()) {
  			mpos.x = get_size().x - mpos.x;
+@@ -2325,7 +2458,7 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 
+ 				// Minimap.
+ 				if (draw_minimap) {
+-					_update_minimap_click();
++					_update_minimap_click(mpos);
+ 					if (dragging_minimap) {
+ 						return;
+ 					}
 @@ -2507,89 +2640,305 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
  					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
@@ -1713,6 +1727,13 @@ index cd092bd..53c0c47 100644
 +	Ref<InputEventScreenTouch> touch = p_gui_input;
 +	if (touch.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		show_selection_handle = true;
++		Vector2i touch_pos = touch->get_position();
++		if (is_layout_rtl()) {
++			touch_pos.x = get_size().x - touch_pos.x;
+ 		}
+-		h_scroll->set_value(h_scroll->get_value() + pan_gesture->get_delta().x * 100);
+-		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
+-			accept_event(); // Accept event if scroll changed.
 +
 +		// Prioritizing selection handle input
 +		if (touch->is_pressed() && selection_handle_enabled) {
@@ -1754,37 +1775,34 @@ index cd092bd..53c0c47 100644
 +				return; // Return early to block default touch logic
 +			}
  		}
--		h_scroll->set_value(h_scroll->get_value() + pan_gesture->get_delta().x * 100);
--		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
--			accept_event(); // Accept event if scroll changed.
-+
+-		queue_accessibility_update();
+ 
+-		return;
+-	}
 +		if (touch->is_released() && selection_handle_drag_type != SELECTION_HANDLE_NONE) {
 +			selection_handle_drag_type = SELECTION_HANDLE_NONE;
 +			dragging_caret_index = -1;
 +			accept_event();
 +			return;
- 		}
--		queue_accessibility_update();
++		}
  
--		return;
--	}
+-	Ref<InputEventMouseMotion> mm = p_gui_input;
 +		if (touch->is_pressed() && !touch->is_double_tap()) {
 +			if (draw_minimap) {
-+				_update_minimap_click();
++				_update_minimap_click(touch_pos);
 +				if (dragging_minimap) {
 +					return;
 +				}
-+			}
- 
--	Ref<InputEventMouseMotion> mm = p_gui_input;
-+			if (touch_dragging_deaccel) {
-+				_cancel_inertial_scroll();
 +			}
  
 -	if (mm.is_valid()) {
 -		Vector2i mpos = mm->get_position();
 -		if (is_layout_rtl()) {
 -			mpos.x = get_size().x - mpos.x;
++			if (touch_dragging_deaccel) {
++				_cancel_inertial_scroll();
++			}
++
 +			touch_dragging_starting = true;
 +			touch_dragging_in_progress = false;
 +
@@ -1805,10 +1823,6 @@ index cd092bd..53c0c47 100644
 +			// we process as a regular tap, similar to how mouse click are handled above omitting logic not relevant to touch taps.
 +			// Notice that a key difference from the mouse click handling logic and double tap events is that for single tap, we apply the logic below on release instead of on press.
 +			// This is because we're unsure whether single tap press event will end as a single tap press->release event, or turn into a drag (press->drag->release) event.
-+			Vector2i touch_pos = touch->get_position();
-+			if (is_layout_rtl()) {
-+				touch_pos.x = get_size().x - touch_pos.x;
-+			}
  			_reset_caret_blink_timer();
  
 -			if (draw_minimap && !dragging_selection) {
@@ -1847,7 +1861,7 @@ index cd092bd..53c0c47 100644
 +			// Minimap.
 +			if (draw_minimap) {
 +				if (touch->is_double_tap()) {
-+					_update_minimap_click();
++					_update_minimap_click(touch_pos);
 +					if (dragging_minimap) {
 +						return;
 +					}
@@ -2065,7 +2079,7 @@ index cd092bd..53c0c47 100644
 +		_reset_caret_blink_timer();
 +
 +		if (draw_minimap && !dragging_selection) {
-+			_update_minimap_drag();
++			_update_minimap_drag(p_event_position);
 +		}
 +
 +		if (!dragging_minimap && !has_ime_text()) {
@@ -2074,7 +2088,7 @@ index cd092bd..53c0c47 100644
 +					_update_selection_mode_pointer();
 +				} break;
 +				case SelectionMode::SELECTION_MODE_WORD: {
-+					_update_selection_mode_word();
++					_update_selection_mode_word_at_pos(p_event_position, false);
 +				} break;
 +				case SelectionMode::SELECTION_MODE_LINE: {
 +					_update_selection_mode_line();
@@ -2199,8 +2213,37 @@ index cd092bd..53c0c47 100644
  	int line = pos.y;
  	int column = pos.x;
  	int caret_index = get_caret_count() - 1;
+@@ -8992,8 +9436,8 @@ void TextEdit::_update_minimap_hover() {
+ 	}
+ }
+ 
+-void TextEdit::_update_minimap_click() {
+-	Point2 mp = get_local_mouse_pos();
++void TextEdit::_update_minimap_click(const Point2 &p_pos) {
++	const Point2 &mp = p_pos;
+ 
+ 	int xmargin_end = get_size().width - Math::floor(_get_current_stylebox()->get_margin(SIDE_RIGHT));
+ 	if (!dragging_minimap && (mp.x < xmargin_end - minimap_width || mp.x > xmargin_end)) {
+@@ -9022,7 +9466,7 @@ void TextEdit::_update_minimap_click() {
+ 	}
+ }
+ 
+-void TextEdit::_update_minimap_drag() {
++void TextEdit::_update_minimap_drag(const Point2 &p_pos) {
+ 	if (!can_drag_minimap) {
+ 		return;
+ 	}
+@@ -9033,7 +9477,7 @@ void TextEdit::_update_minimap_drag() {
+ 		control_height = scroll_height;
+ 	}
+ 
+-	Point2 mp = get_local_mouse_pos();
++	const Point2 &mp = p_pos;
+ 
+ 	double diff = (mp.y - minimap_scroll_click_pos) / control_height;
+ 	v_scroll->set_as_ratio(minimap_scroll_ratio + diff);
 diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
-index 8470ccc..774b70d 100644
+index 8470ccc..cb24cfd 100644
 --- a/scene/gui/text_edit.h
 +++ b/scene/gui/text_edit.h
 @@ -510,11 +510,42 @@ private:
@@ -2246,6 +2289,17 @@ index 8470ccc..774b70d 100644
  	void _update_selection_mode_line(bool p_initial = false);
  
  	void _pre_shift_selection(int p_caret);
+@@ -585,8 +616,8 @@ private:
+ 	double minimap_scroll_click_pos = 0.0;
+ 
+ 	void _update_minimap_hover();
+-	void _update_minimap_click();
+-	void _update_minimap_drag();
++	void _update_minimap_click(const Point2 &p_pos);
++	void _update_minimap_drag(const Point2 &p_pos);
+ 
+ 	/* Gutters. */
+ 	Vector<GutterInfo> gutters;
 @@ -840,6 +871,7 @@ public:
  	void set_shortcut_keys_enabled(bool p_enabled);
  	bool is_shortcut_keys_enabled() const;

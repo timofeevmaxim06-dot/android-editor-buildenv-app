@@ -46,6 +46,7 @@ func _test_native_touch(base: Control) -> void:
 	if code == null:
 		_expect(false, "Native touch has no CodeEdit")
 		return
+	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Native touch has less than half the window for code")
 	var original := code.text
 	var original_emulation := Input.emulate_mouse_from_touch
 	Input.emulate_mouse_from_touch = true
@@ -64,9 +65,17 @@ func _test_native_touch(base: Control) -> void:
 	var local := Vector2(code.size.x * 0.4, code.size.y * 0.35)
 	var point := code.global_position + local
 	var expected_caret := code.get_line_column_at_pos(local)
+	# A stale mouse over the minimap must not intercept a native text tap.
+	Input.emulate_mouse_from_touch = false
+	var stale_mouse := InputEventMouseMotion.new()
+	stale_mouse.position = code.global_position + Vector2(code.size.x - 40, code.size.y * 0.5)
+	stale_mouse.global_position = stale_mouse.position
+	Input.parse_input_event(stale_mouse)
+	await _settle(3)
 	await _touch(point, true)
 	await _touch(point, false)
 	_expect(code.get_caret_line() == expected_caret.y and code.get_caret_column() == expected_caret.x, "Touch release did not place the caret at its position")
+	Input.emulate_mouse_from_touch = true
 	code.set_caret_line(0)
 	code.set_caret_column(3)
 	code.set_v_scroll(0)
@@ -221,14 +230,18 @@ func _test_text_tools(base: Control, output: String) -> void:
 	_inside_window(code, "code editor")
 	_inside_window(tools, "code tools")
 	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Less than half the window remains for code in compact mode")
+	var status := editor.find_child("PhoneCodeStatus", true, false) as Control
+	_expect(status != null and not status.is_visible_in_tree(), "Compact mode did not hide the code status row")
 	var navigation := base.find_child("PhoneNavigation", true, false) as Control
 	_expect(navigation.is_visible_in_tree(), "Unified tabs are inaccessible in code mode")
 	await _press_text_tool(editor, "PhonePanels")
 	_expect(navigation.is_visible_in_tree(), "Panels command did not restore navigation")
+	_expect(status.is_visible_in_tree(), "Panels command did not restore the code status row")
 	_inside_window(navigation, "restored navigation")
 	_inside_window(code, "code with panels")
 	await _press_text_tool(editor, "PhonePanels")
 	_expect(navigation.is_visible_in_tree(), "Unified tabs disappeared when menus were collapsed")
+	_expect(not status.is_visible_in_tree(), "Status row did not collapse with menus")
 	var scripts := base.find_child("PhoneScriptList", true, false) as Control
 	await _press_text_tool(editor, "PhoneScripts")
 	_expect(scripts.is_visible_in_tree(), "Scripts command did not open the native list")
