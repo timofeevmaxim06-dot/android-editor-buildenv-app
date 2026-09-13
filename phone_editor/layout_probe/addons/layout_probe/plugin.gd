@@ -32,6 +32,14 @@ func _inside_window(control: Control, label: String) -> void:
 	_expect(bounds.grow(2).encloses(rect), "%s outside window: %s / %s" % [label, rect, bounds])
 	observations.append({"control": label, "rect": str(rect), "window": str(bounds)})
 
+func _dump_widths(node: Node, threshold: float) -> void:
+	if node is Control and node.is_visible_in_tree():
+		var control := node as Control
+		if control.get_combined_minimum_size().x >= threshold:
+			print("PHONE_MIN_WIDTH ", control.get_path(), " class=", control.get_class(), " min=", control.get_combined_minimum_size(), " size=", control.size)
+	for child in node.get_children(true):
+		_dump_widths(child, threshold)
+
 func _run_probe() -> void:
 	_mark("waiting_for_initial_frames")
 	await _settle(45)
@@ -68,6 +76,7 @@ func _run_probe() -> void:
 		get_tree().root.size = window_size
 		await _settle()
 		_expect(get_tree().root.size == window_size, "Window was enlarged beyond requested drawable size")
+		_dump_widths(base, window_size.x - 100)
 		for button_name in ["PhoneWorkspaceButton", "PhoneSceneButton", "PhoneFilesButton", "PhoneInspectorButton"]:
 			_mark("select_%s_%s" % [window_size, button_name])
 			var button := base.find_child(button_name, true, false) as Button
