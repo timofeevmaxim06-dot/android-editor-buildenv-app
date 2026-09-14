@@ -39,10 +39,10 @@ index a469a50..c5d5c0f 100644
  	content->set_selection_enabled(p_allow_selection);
  	content->set_context_menu_enabled(p_allow_selection);
 diff --git a/editor/docks/editor_dock_manager.cpp b/editor/docks/editor_dock_manager.cpp
-index 50b991a..129877e 100644
+index 50b991a..d023ba8 100644
 --- a/editor/docks/editor_dock_manager.cpp
 +++ b/editor/docks/editor_dock_manager.cpp
-@@ -29,6 +29,8 @@
+@@ -29,10 +29,14 @@
  /**************************************************************************/
  
  #include "editor_dock_manager.h"
@@ -51,12 +51,88 @@ index 50b991a..129877e 100644
  
  #include "core/object/callable_mp.h"
  #include "editor/docks/dock_tab_container.h"
-@@ -195,7 +197,25 @@ void EditorDockManager::_update_layout() {
+ #include "editor/docks/editor_dock.h"
++#include "editor/docks/scene_tree_dock.h"
++#include "editor/editor_data.h"
+ #include "editor/editor_node.h"
+ #include "editor/editor_string_names.h"
+ #include "editor/gui/window_wrapper.h"
+@@ -41,6 +45,7 @@
+ #include "scene/gui/box_container.h"
+ #include "scene/gui/button.h"
+ #include "scene/gui/label.h"
++#include "scene/gui/menu_button.h"
+ #include "scene/gui/popup_menu.h"
+ #include "scene/gui/split_container.h"
+ #include "scene/gui/tab_container.h"
+@@ -195,7 +200,88 @@ void EditorDockManager::_update_layout() {
  	EditorNode::get_singleton()->save_editor_layout_delayed();
  }
  
-+void EditorDockManager::setup_phone_navigation(HBoxContainer *p_navigation) {
++void EditorDockManager::setup_phone_navigation(HBoxContainer *p_navigation, MenuButton *p_sections) {
 +	phone_navigation = p_navigation;
++	phone_sections = p_sections;
++	phone_sections->get_popup()->connect("about_to_popup", callable_mp(this, &EditorDockManager::_phone_sections_open));
++	phone_sections->get_popup()->connect(SceneStringName(id_pressed), callable_mp(this, &EditorDockManager::_phone_section_selected));
++}
++
++void EditorDockManager::_phone_sections_open() {
++	PopupMenu *menu = phone_sections->get_popup();
++	menu->clear();
++	phone_section_targets.clear();
++	Vector<Button *> targets;
++	for (int i = 0; i < phone_navigation->get_child_count(); i++) {
++		Node *child = phone_navigation->get_child(i);
++		if (Button *button = Object::cast_to<Button>(child)) {
++			targets.push_back(button);
++		} else if (child->get_name() == "EditorMainScreenButtons") {
++			for (int j = 0; j < child->get_child_count(); j++) {
++				if (Button *button = Object::cast_to<Button>(child->get_child(j))) {
++					targets.push_back(button);
++				}
++			}
++		}
++	}
++	for (Button *button : targets) {
++		if (!button->is_visible() || button->is_disabled()) {
++			continue;
++		}
++		int id = phone_section_targets.size();
++		phone_section_targets.push_back(button->get_instance_id());
++		menu->add_radio_check_item(button->get_text(), id);
++		menu->set_item_checked(id, button->is_pressed());
++	}
++}
++
++void EditorDockManager::_phone_section_selected(int p_id) {
++	ERR_FAIL_INDEX(p_id, phone_section_targets.size());
++	Button *button = ObjectDB::get_instance<Button>(phone_section_targets[p_id]);
++	if (button && button->is_visible() && !button->is_disabled()) {
++		button->emit_signal(SceneStringName(pressed));
++	}
++}
++
++void EditorDockManager::_phone_choose_node() {
++	focus_dock(SceneTreeDock::get_singleton());
++}
++
++void EditorDockManager::_update_phone_context() {
++	if (!phone_context || !phone_slot) {
++		return;
++	}
++	Control *active = phone_slot->get_current_tab_control();
++	bool needs_node = active && (active->is_class("InspectorDock") || active->is_class("SignalsDock") || active->is_class("GroupsDock"));
++	phone_context->set_visible(needs_node);
++	TypedArray<Node> nodes = EditorNode::get_singleton()->get_editor_selection()->get_selected_nodes();
++	String label = String::utf8("Узел не выбран");
++	if (nodes.size() == 1) {
++		Node *node = nodes[0];
++		label = String::utf8("В сцене: ") + node->get_name();
++	} else if (nodes.size() > 1) {
++		label = String::utf8("Выбрано узлов: ") + itos(nodes.size());
++	}
++	phone_selection_label->set_text(label);
++	phone_selection_label->set_tooltip_text(label);
 +}
 +
 +void EditorDockManager::_update_phone_buttons() {
@@ -70,6 +146,7 @@ index 50b991a..129877e 100644
 +		entry.value->set_pressed_no_signal(phone_panels->is_visible() && active == entry.key);
 +	}
 +	EditorNode::get_singleton()->get_editor_main_screen()->set_phone_workspace_active(phone_workspace->is_visible());
++	_update_phone_context();
 +}
 +
  void EditorDockManager::update_docks_menu() {
@@ -77,7 +154,7 @@ index 50b991a..129877e 100644
  	docks_menu->clear();
  	docks_menu->reset_size();
  
-@@ -324,10 +344,40 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
+@@ -324,10 +410,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
  			p_window_dump.get("window_screen_rect", Rect2i()));
  }
  
@@ -86,6 +163,23 @@ index 50b991a..129877e 100644
 +	phone_slot = p_slot;
 +	phone_workspace = p_workspace;
 +	phone_panels = p_panels;
++	HBoxContainer *context = memnew(HBoxContainer);
++	context->set_name("PhoneSelectionContext");
++	phone_context = context;
++	phone_panels->add_child(context);
++	phone_panels->move_child(context, 0);
++	phone_selection_label = memnew(Label);
++	phone_selection_label->set_name("PhoneSelectedNode");
++	phone_selection_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
++	phone_selection_label->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
++	context->add_child(phone_selection_label);
++	Button *choose = memnew(Button);
++	choose->set_name("PhoneChooseNode");
++	choose->set_text(String::utf8("Выбрать узел"));
++	choose->set_custom_minimum_size(Size2(0, 34) * EDSCALE);
++	choose->connect(SceneStringName(pressed), callable_mp(this, &EditorDockManager::_phone_choose_node));
++	context->add_child(choose);
++	EditorNode::get_singleton()->get_editor_selection()->connect("selection_changed", callable_mp(this, &EditorDockManager::_update_phone_context));
 +	show_phone_workspace(true);
 +}
 +
@@ -118,7 +212,7 @@ index 50b991a..129877e 100644
  	Node *parent = p_dock->get_parent();
  	if (parent == p_target) {
  		if (parent && p_tab_index >= 0) {
-@@ -701,11 +751,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -701,11 +834,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  	}
  
  	DockTabContainer *tab_container = p_dock->get_parent_container();
@@ -136,7 +230,7 @@ index 50b991a..129877e 100644
  		tab_container->get_tab_bar()->grab_focus();
  	}
  
-@@ -713,6 +768,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -713,6 +851,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  		int tab_index = tab_container->get_tab_idx_from_control(p_dock);
  		tab_container->set_current_tab(tab_index);
  	}
@@ -144,7 +238,7 @@ index 50b991a..129877e 100644
  }
  
  void EditorDockManager::focus_dock(EditorDock *p_dock) {
-@@ -737,6 +793,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
+@@ -737,6 +876,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
  
  	p_dock->dock_slot_index = p_dock->default_slot;
  	all_docks.push_back(p_dock);
@@ -163,7 +257,7 @@ index 50b991a..129877e 100644
  	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  
-@@ -755,6 +823,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
+@@ -755,6 +906,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
  
  	_move_dock(p_dock, nullptr);
  
@@ -175,18 +269,20 @@ index 50b991a..129877e 100644
  	p_dock->disconnect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style));
  	p_dock->disconnect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style));
 diff --git a/editor/docks/editor_dock_manager.h b/editor/docks/editor_dock_manager.h
-index caf7277..3c63563 100644
+index caf7277..9adc005 100644
 --- a/editor/docks/editor_dock_manager.h
 +++ b/editor/docks/editor_dock_manager.h
-@@ -35,6 +35,7 @@
+@@ -35,6 +35,9 @@
  #include "scene/gui/split_container.h"
  
  class Button;
 +class HBoxContainer;
++class Label;
++class MenuButton;
  class ConfigFile;
  class Control;
  class EditorDock;
-@@ -102,6 +103,12 @@ private:
+@@ -102,6 +105,20 @@ private:
  
  	EditorDock *dock_tab_dragged = nullptr;
  	bool docks_visible = true;
@@ -194,19 +290,27 @@ index caf7277..3c63563 100644
 +	Control *phone_workspace = nullptr;
 +	Control *phone_panels = nullptr;
 +	HBoxContainer *phone_navigation = nullptr;
++	MenuButton *phone_sections = nullptr;
++	Vector<ObjectID> phone_section_targets;
++	Control *phone_context = nullptr;
++	Label *phone_selection_label = nullptr;
++	void _phone_sections_open();
++	void _phone_section_selected(int p_id);
++	void _update_phone_context();
++	void _phone_choose_node();
 +	HashMap<EditorDock *, Button *> phone_buttons;
 +	void _update_phone_buttons();
  
  	DockContextPopup *dock_context_popup = nullptr;
  	PopupMenu *docks_menu = nullptr;
-@@ -129,6 +136,10 @@ private:
+@@ -129,6 +146,10 @@ private:
  public:
  	static EditorDockManager *get_singleton() { return singleton; }
  
 +	void setup_phone_layout(DockTabContainer *p_slot, Control *p_workspace, Control *p_panels);
 +	void show_phone_workspace(bool p_show);
 +	bool is_phone_panel_visible() const;
-+	void setup_phone_navigation(HBoxContainer *p_navigation);
++	void setup_phone_navigation(HBoxContainer *p_navigation, MenuButton *p_sections);
  	void update_docks_menu();
  	void update_tab_styles();
  	void set_tab_icon_max_width(int p_max_width);
@@ -308,7 +412,7 @@ index 78ec499..db38de4 100644
  	bool is_button_enabled(int p_index) const;
  
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
-index 5bc4649..07ad3f7 100644
+index 5bc4649..00a7c62 100644
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
 @@ -30,6 +30,9 @@
@@ -429,7 +533,7 @@ index 5bc4649..07ad3f7 100644
  	LocalVector<DockTabContainer *> dock_slots;
  	{
  		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
-@@ -8864,6 +8899,49 @@ EditorNode::EditorNode() {
+@@ -8864,6 +8899,58 @@ EditorNode::EditorNode() {
  	srt->add_child(editor_main_screen);
  	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
  
@@ -466,20 +570,29 @@ index 5bc4649..07ad3f7 100644
 +		navigation_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
 +		navigation_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
 +		navigation_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-+		center_vb->add_child(navigation_scroll);
-+		center_vb->move_child(navigation_scroll, 0);
++		HBoxContainer *navigation_bar = memnew(HBoxContainer);
++		navigation_bar->set_name("PhoneNavigationBar");
++		center_vb->add_child(navigation_bar);
++		center_vb->move_child(navigation_bar, 0);
++		MenuButton *sections = memnew(MenuButton);
++		sections->set_name("PhoneSections");
++		sections->set_text(String::utf8("☰"));
++		sections->set_tooltip_text(String::utf8("Все разделы редактора"));
++		sections->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++		navigation_bar->add_child(sections);
++		navigation_bar->add_child(navigation_scroll);
 +		phone_navigation = memnew(HBoxContainer);
 +		phone_navigation->set_name("PhoneNavigationRow");
 +		phone_navigation->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 +		navigation_scroll->add_child(phone_navigation);
-+		editor_dock_manager->setup_phone_navigation(phone_navigation);
++		editor_dock_manager->setup_phone_navigation(phone_navigation, sections);
 +	}
 +
 +
  	scene_root = memnew(SubViewport);
  	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
  	scene_root->set_translation_domain(StringName());
-@@ -9076,8 +9154,13 @@ EditorNode::EditorNode() {
+@@ -9076,8 +9163,13 @@ EditorNode::EditorNode() {
  	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
  	main_editor_button_hb->set_name("EditorMainScreenButtons");
  	editor_main_screen->set_button_container(main_editor_button_hb);
@@ -495,7 +608,7 @@ index 5bc4649..07ad3f7 100644
  
  	// Spacer to center 2D / 3D / Script buttons.
  	right_spacer = memnew(Control);
-@@ -9190,6 +9273,7 @@ EditorNode::EditorNode() {
+@@ -9190,6 +9282,7 @@ EditorNode::EditorNode() {
  	history_dock = memnew(HistoryDock);
  	editor_dock_manager->add_dock(history_dock);
  
@@ -531,7 +644,7 @@ index f683e13..be4e03d 100644
  	ConfirmationDialog *video_restart_dialog = nullptr;
  
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..ea60b55 100644
+index aceecca..23ef535 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -543,7 +656,13 @@ index aceecca..ea60b55 100644
  
  #include "core/input/input.h"
  #include "core/object/callable_mp.h"
-@@ -47,6 +49,7 @@
+@@ -42,11 +44,13 @@
+ #include "editor/themes/editor_scale.h"
+ #include "editor/themes/editor_theme_manager.h"
+ #include "scene/gui/check_box.h"
++#include "scene/gui/flow_container.h"
+ #include "scene/gui/label.h"
+ #include "scene/gui/line_edit.h"
  #include "scene/gui/menu_button.h"
  #include "scene/gui/rich_text_label.h"
  #include "scene/gui/separator.h"
@@ -551,7 +670,17 @@ index aceecca..ea60b55 100644
  #include "scene/main/timer.h"
  #include "scene/resources/font.h"
  
-@@ -1729,7 +1732,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
+@@ -1133,6 +1137,9 @@ void CodeTextEditor::update_editor_settings() {
+ 	text_editor->set_line_folding_enabled(EDITOR_GET("text_editor/appearance/lines/code_folding"));
+ 	text_editor->set_draw_fold_gutter(EDITOR_GET("text_editor/appearance/lines/code_folding"));
+ 	text_editor->set_line_wrapping_mode((TextEdit::LineWrappingMode)EDITOR_GET("text_editor/appearance/lines/word_wrap").operator int());
++	if (phone_wrap_button) {
++		phone_wrap_button->set_pressed_no_signal(text_editor->get_line_wrapping_mode() != TextEdit::LINE_WRAPPING_NONE);
++	}
+ 	text_editor->set_autowrap_mode((TextServer::AutowrapMode)EDITOR_GET("text_editor/appearance/lines/autowrap_mode").operator int());
+ 
+ 	// Appearance: Whitespace
+@@ -1729,7 +1736,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
  void CodeTextEditor::_toggle_files_pressed() {
  	ERR_FAIL_NULL(toggle_files_list);
  	toggle_files_list->set_visible(!toggle_files_list->is_visible());
@@ -560,7 +689,7 @@ index aceecca..ea60b55 100644
  	update_toggle_files_button();
  }
  
-@@ -1885,7 +1888,7 @@ void CodeTextEditor::_zoom_out() {
+@@ -1885,7 +1892,7 @@ void CodeTextEditor::_zoom_out() {
  }
  
  void CodeTextEditor::_zoom_to(float p_zoom_factor) {
@@ -569,17 +698,36 @@ index aceecca..ea60b55 100644
  		return;
  	}
  
-@@ -1946,6 +1949,105 @@ void CodeTextEditor::update_toggle_files_button() {
+@@ -1946,6 +1953,130 @@ void CodeTextEditor::update_toggle_files_button() {
  	toggle_files_button->set_tooltip_text(vformat("%s (%s)", TTR("Toggle Files Panel"), ED_GET_SHORTCUT("script_editor/toggle_files_panel")->get_as_text()));
  }
  
 +
-+Button *CodeTextEditor::_phone_add_action(HBoxContainer *p_row, const String &p_name, const String &p_label, int p_action) {
++void CodeTextEditor::_phone_show_more(bool p_show) {
++	phone_extra_tools->set_visible(p_show);
++}
++
++void CodeTextEditor::_phone_hide_more() {
++	phone_extra_tools->hide();
++	phone_more_button->set_pressed_no_signal(false);
++}
++
++void CodeTextEditor::_phone_wrap_toggled(bool p_enabled) {
++	// A display preference only: no text rewriting, undo operation or IME commit.
++	EditorSettings::get_singleton()->set("text_editor/appearance/lines/word_wrap", p_enabled ? TextEdit::LINE_WRAPPING_BOUNDARY : TextEdit::LINE_WRAPPING_NONE);
++	text_editor->set_line_wrapping_mode(p_enabled ? TextEdit::LINE_WRAPPING_BOUNDARY : TextEdit::LINE_WRAPPING_NONE);
++	if (p_enabled) {
++		text_editor->set_h_scroll(0);
++	}
++}
++
++Button *CodeTextEditor::_phone_add_action(Container *p_row, const String &p_name, const String &p_label, int p_action) {
 +	Button *button = memnew(Button);
 +	button->set_name(p_name);
 +	button->set_text(p_label);
 +	button->set_focus_mode(FOCUS_NONE); // Keep selection and the Android IME on the code.
 +	button->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++	button->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_phone_hide_more));
 +	if (p_action >= 0) {
 +		button->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_phone_text_action).bind(p_action));
 +	}
@@ -588,6 +736,7 @@ index aceecca..ea60b55 100644
 +}
 +
 +void CodeTextEditor::_phone_scroll_toggled(bool p_enabled) {
++	phone_pan_lock.reset();
 +	phone_scroll_surface->set_visible(p_enabled);
 +	phone_scroll_button->set_text(p_enabled ? String::utf8("Править") : String::utf8("Листать"));
 +}
@@ -595,20 +744,25 @@ index aceecca..ea60b55 100644
 +void CodeTextEditor::_phone_scroll_input(const Ref<InputEvent> &p_event) {
 +	// Explicit reading mode: dragging cannot move the caret or change selection.
 +	Vector2 pixels;
++	Ref<InputEventScreenTouch> touch = p_event;
++	if (touch.is_valid()) {
++		phone_pan_lock.reset();
++	}
 +	Ref<InputEventScreenDrag> touch_drag = p_event;
 +	Ref<InputEventMouseMotion> motion = p_event;
 +	Ref<InputEventMouseButton> button = p_event;
 +	Ref<InputEventPanGesture> pan = p_event;
 +	if (touch_drag.is_valid()) {
-+		pixels = -touch_drag->get_relative();
++		pixels = phone_pan_lock.filter(-touch_drag->get_relative());
 +	} else if (motion.is_valid() && motion->get_device() != InputEvent::DEVICE_ID_EMULATION && motion->get_button_mask().has_flag(MouseButtonMask::LEFT)) {
-+		pixels = -motion->get_relative();
++		pixels = phone_pan_lock.filter(-motion->get_relative());
 +	} else if (pan.is_valid()) {
 +		pixels = pan->get_delta();
 +#ifdef ANDROID_ENABLED
 +		pixels *= 5.0;
 +#endif
 +	} else if (button.is_valid() && button->is_pressed()) {
++		phone_pan_lock.reset();
 +		if (button->get_button_index() == MouseButton::WHEEL_DOWN) {
 +			pixels.y = text_editor->get_line_height() * 3;
 +		} else if (button->get_button_index() == MouseButton::WHEEL_UP) {
@@ -675,30 +829,38 @@ index aceecca..ea60b55 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,10 +2065,79 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2094,101 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
 +
  	text_editor->set_deselect_on_focus_loss_enabled(false);
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		HBoxContainer *primary = memnew(HBoxContainer);
++		primary->set_name("PhoneCodePrimary");
++		add_child(primary);
++		move_child(primary, 0);
 +		ScrollContainer *tools = memnew(ScrollContainer);
 +		tools->set_name("PhoneCodeTools");
-+		tools->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
-+		tools->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		tools->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		tools->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		tools->set_custom_minimum_size(Size2(0, 110) * EDSCALE);
 +		tools->set_h_size_flags(SIZE_EXPAND_FILL);
 +		add_child(tools);
-+		move_child(tools, 0);
-+		HBoxContainer *row = memnew(HBoxContainer);
++		move_child(tools, 1);
++		phone_extra_tools = tools;
++		tools->hide();
++		HFlowContainer *row = memnew(HFlowContainer);
++		row->set_h_size_flags(SIZE_EXPAND_FILL);
 +		tools->add_child(row);
 +		// Compact script mode keeps code usable at 200%; Panels restores navigation.
 +		_phone_add_action(row, "PhonePanels", String::utf8("Панели"), 9);
-+		_phone_add_action(row, "PhonePaste", String::utf8("Вставить"), 0);
-+		_phone_add_action(row, "PhoneUndo", String::utf8("Отмена"), 3);
++		_phone_add_action(primary, "PhonePaste", String::utf8("Вставить"), 0);
++		_phone_add_action(primary, "PhoneUndo", String::utf8("↶"), 3)->set_tooltip_text(String::utf8("Отменить последнее изменение"));
 +		_phone_add_action(row, "PhoneSelectLine", String::utf8("Строка"), 5);
 +		_phone_add_action(row, "PhoneCopy", String::utf8("Копировать"), 1);
-+		_phone_add_action(row, "PhoneLeft", String::utf8("←"), 10);
-+		_phone_add_action(row, "PhoneRight", String::utf8("→"), 11);
++		_phone_add_action(primary, "PhoneLeft", String::utf8("←"), 10)->set_tooltip_text(String::utf8("Курсор влево; в режиме «Выделять» — расширить выделение"));
++		_phone_add_action(primary, "PhoneRight", String::utf8("→"), 11)->set_tooltip_text(String::utf8("Курсор вправо; в режиме «Выделять» — расширить выделение"));
 +		phone_select_button = _phone_add_action(row, "PhoneExtendSelection", String::utf8("Выделять"), -1);
 +		phone_select_button->set_toggle_mode(true);
 +		phone_select_button->set_tooltip_text(String::utf8("Включите и нажимайте стрелки, чтобы точно выделить текст."));
@@ -722,7 +884,7 @@ index aceecca..ea60b55 100644
 +		font_smaller->set_tooltip_text(String::utf8("Уменьшить шрифт кода. Размер панелей не меняется."));
 +		font_smaller->set_accessibility_name(TTRC("Zoom Out"));
 +		font_smaller->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_out));
-+		Button *font_larger = _phone_add_action(row, "PhoneFontLarger", String::utf8("А+"), -1);
++		Button *font_larger = _phone_add_action(primary, "PhoneFontLarger", String::utf8("А+"), -1);
 +		font_larger->set_tooltip_text(String::utf8("Увеличить шрифт кода. Размер панелей не меняется."));
 +		font_larger->set_accessibility_name(TTRC("Zoom In"));
 +		font_larger->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_in));
@@ -730,6 +892,20 @@ index aceecca..ea60b55 100644
 +		font_reset->set_tooltip_text(String::utf8("Вернуть размер шрифта кода из настроек редактора."));
 +		font_reset->set_accessibility_name(TTRC("Reset Zoom"));
 +		font_reset->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_to).bind(1.0f));
++		phone_wrap_button = _phone_add_action(row, "PhoneWrap", String::utf8("Перенос строк"), -1);
++		phone_wrap_button->set_toggle_mode(true);
++		phone_wrap_button->set_pressed_no_signal((int)EDITOR_GET("text_editor/appearance/lines/word_wrap") != TextEdit::LINE_WRAPPING_NONE);
++		phone_wrap_button->set_tooltip_text(String::utf8("Показывать длинные строки целиком по ширине окна. Содержимое файла не меняется."));
++		phone_wrap_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_wrap_toggled));
++		phone_more_button = memnew(Button);
++		phone_more_button->set_name("PhoneMore");
++		phone_more_button->set_text(String::utf8("⋮"));
++		phone_more_button->set_tooltip_text(String::utf8("Все команды кода"));
++		phone_more_button->set_focus_mode(FOCUS_NONE);
++		phone_more_button->set_toggle_mode(true);
++		phone_more_button->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++		primary->add_child(phone_more_button);
++		phone_more_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_show_more));
 +		phone_scroll_surface = memnew(Control);
 +		phone_scroll_surface->set_name("PhoneCodeScrollSurface");
 +		text_editor->add_child(phone_scroll_surface);
@@ -757,10 +933,10 @@ index aceecca..ea60b55 100644
  	status_bar->set_custom_minimum_size(Size2(0, 24 * EDSCALE)); // Adjust for the height of the warning icon.
  	idle = memnew(Timer);
 diff --git a/editor/gui/code_editor.h b/editor/gui/code_editor.h
-index d624099..9988a32 100644
+index d624099..f585878 100644
 --- a/editor/gui/code_editor.h
 +++ b/editor/gui/code_editor.h
-@@ -161,7 +161,16 @@ class CodeTextEditor : public VBoxContainer {
+@@ -161,7 +161,23 @@ class CodeTextEditor : public VBoxContainer {
  	GDCLASS(CodeTextEditor, VBoxContainer);
  
  	CodeEdit *text_editor = nullptr;
@@ -769,10 +945,17 @@ index d624099..9988a32 100644
 +	Control *phone_scroll_surface = nullptr;
 +	Button *phone_scroll_button = nullptr;
 +	Button *phone_select_button = nullptr;
++	Control *phone_extra_tools = nullptr;
++	Button *phone_more_button = nullptr;
++	Button *phone_wrap_button = nullptr;
++	TextEditTouchAxisLock phone_pan_lock;
++	void _phone_show_more(bool p_show);
++	void _phone_hide_more();
++	void _phone_wrap_toggled(bool p_enabled);
 +	void _phone_text_action(int p_action);
 +	void _phone_scroll_toggled(bool p_enabled);
 +	void _phone_scroll_input(const Ref<InputEvent> &p_event);
-+	Button *_phone_add_action(HBoxContainer *p_row, const String &p_name, const String &p_label, int p_action);
++	Button *_phone_add_action(Container *p_row, const String &p_name, const String &p_label, int p_action);
 +
  	HBoxContainer *status_bar = nullptr;
  
@@ -880,10 +1063,83 @@ index 2cdd50b..f560cf2 100644
  
  	String sct;
 diff --git a/editor/scene/canvas_item_editor_plugin.cpp b/editor/scene/canvas_item_editor_plugin.cpp
-index c939e3a..ab41ca5 100644
+index c939e3a..8b6d967 100644
 --- a/editor/scene/canvas_item_editor_plugin.cpp
 +++ b/editor/scene/canvas_item_editor_plugin.cpp
-@@ -5637,7 +5637,13 @@ CanvasItemEditor::CanvasItemEditor() {
+@@ -4708,6 +4708,10 @@ void CanvasItemEditor::_button_tool_select(int p_index) {
+ 	}
+ 
+ 	tool = (Tool)p_index;
++	if (phone_select) {
++		phone_select->set_pressed_no_signal(tool == TOOL_SELECT);
++		phone_pan->set_pressed_no_signal(tool == TOOL_PAN);
++	}
+ 
+ 	if (p_index == TOOL_EDIT_PIVOT && Input::get_singleton()->is_key_pressed(Key::SHIFT)) {
+ 		// Special action that places temporary rotation pivot in the middle of the selection.
+@@ -4726,6 +4730,22 @@ void CanvasItemEditor::_button_tool_select(int p_index) {
+ 	emit_signal("canvas_item_tool_changed", tool);
+ }
+ 
++void CanvasItemEditor::_phone_view_action(int p_action) {
++	if (p_action == 0 || p_action == 1) {
++		_popup_callback(p_action == 0 ? VIEW_CENTER_TO_SELECTION : VIEW_FRAME_TO_SELECTION);
++		return;
++	}
++	Node *scene = EditorNode::get_singleton()->get_edited_scene();
++	Rect2 rect = scene ? _get_encompassing_rect(scene) : Rect2();
++	if (rect.size.x < 1 || rect.size.y < 1) {
++		rect = Rect2(Vector2(), Vector2(GLOBAL_GET("display/window/size/viewport_width"), GLOBAL_GET("display/window/size/viewport_height")));
++	}
++	zoom = CLAMP(MIN(viewport->get_size().x / MAX(1.0f, rect.size.x), viewport->get_size().y / MAX(1.0f, rect.size.y)) * 0.9f, 0.01f, 64.0f);
++	zoom_widget->set_zoom(zoom);
++	viewport->queue_redraw();
++	callable_mp(this, &CanvasItemEditor::center_at).call_deferred(rect.get_center());
++}
++
+ void CanvasItemEditor::_insert_animation_keys(bool p_location, bool p_rotation, bool p_scale, bool p_on_existing) {
+ 	const HashMap<ObjectID, Object *> &selection = editor_selection->get_selection();
+ 
+@@ -5631,13 +5651,52 @@ CanvasItemEditor::CanvasItemEditor() {
+ 	MarginContainer *toolbar_margin = memnew(MarginContainer);
+ 	toolbar_margin->set_theme_type_variation("MainToolBarMargin");
+ 	add_child(toolbar_margin);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		HBoxContainer *phone_bar = memnew(HBoxContainer);
++		phone_bar->set_name("Phone2DTools");
++		add_child(phone_bar);
++		move_child(phone_bar, 0);
++		phone_select = memnew(Button);
++		phone_select->set_name("Phone2DSelect");
++		phone_select->set_text(String::utf8("Выбор"));
++		phone_select->set_toggle_mode(true);
++		phone_select->set_pressed_no_signal(true);
++		phone_select->set_tooltip_text(String::utf8("Выбирать объекты касанием и рамкой"));
++		phone_select->set_custom_minimum_size(Size2(0, 34) * EDSCALE);
++		phone_select->connect(SceneStringName(pressed), callable_mp(this, &CanvasItemEditor::_button_tool_select).bind(TOOL_SELECT));
++		phone_bar->add_child(phone_select);
++		phone_pan = memnew(Button);
++		phone_pan->set_name("Phone2DPan");
++		phone_pan->set_text(String::utf8("Обзор"));
++		phone_pan->set_toggle_mode(true);
++		phone_pan->set_tooltip_text(String::utf8("Перемещать вид одним пальцем без выделения объектов"));
++		phone_pan->set_custom_minimum_size(Size2(0, 34) * EDSCALE);
++		phone_pan->connect(SceneStringName(pressed), callable_mp(this, &CanvasItemEditor::_button_tool_select).bind(TOOL_PAN));
++		phone_bar->add_child(phone_pan);
++		MenuButton *frame = memnew(MenuButton);
++		frame->set_name("Phone2DFrame");
++		frame->set_text(String::utf8("Кадр"));
++		frame->set_tooltip_text(String::utf8("Вернуться к объекту или показать всю сцену"));
++		frame->set_custom_minimum_size(Size2(0, 34) * EDSCALE);
++		frame->get_popup()->add_item(String::utf8("К выделенному объекту"), 0);
++		frame->get_popup()->add_item(String::utf8("Вписать выделенное"), 1);
++		frame->get_popup()->add_item(String::utf8("Показать всю сцену"), 2);
++		frame->get_popup()->connect(SceneStringName(id_pressed), callable_mp(this, &CanvasItemEditor::_phone_view_action));
++		phone_bar->add_child(frame);
++	}
+ 
+ 	// A fluid container for all toolbars.
+ 	HFlowContainer *main_flow = memnew(HFlowContainer);
  	toolbar_margin->add_child(main_flow);
  
  	// Main toolbars.
@@ -898,6 +1154,30 @@ index c939e3a..ab41ca5 100644
  	main_menu_hbox->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
  	main_flow->add_child(main_menu_hbox);
  
+@@ -5730,6 +5789,9 @@ CanvasItemEditor::CanvasItemEditor() {
+ 	panner->set_callbacks(callable_mp(this, &CanvasItemEditor::_pan_callback), callable_mp(this, &CanvasItemEditor::_zoom_callback));
+ 
+ 	viewport = memnew(CanvasItemEditorViewport(this));
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		viewport->set_name("Phone2DViewport");
++	}
+ 	viewport_scrollable->add_child(viewport);
+ 	viewport->set_mouse_filter(MOUSE_FILTER_PASS);
+ 	viewport->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
+diff --git a/editor/scene/canvas_item_editor_plugin.h b/editor/scene/canvas_item_editor_plugin.h
+index 1982fda..631050d 100644
+--- a/editor/scene/canvas_item_editor_plugin.h
++++ b/editor/scene/canvas_item_editor_plugin.h
+@@ -433,6 +433,9 @@ private:
+ 
+ 	void _prepare_view_menu();
+ 	void _popup_callback(int p_op);
++	Button *phone_select = nullptr;
++	Button *phone_pan = nullptr;
++	void _phone_view_action(int p_action);
+ 	bool updating_scroll = false;
+ 	void _update_scroll(real_t);
+ 	void _update_scrollbars();
 diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
 index 0e60dde..c73c219 100644
 --- a/editor/script/script_editor_plugin.cpp
@@ -1117,13 +1397,17 @@ index 8dc98d6..6a49ff5 100644
  	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
  	_initial_set("interface/scene_tabs/show_thumbnail_on_hover", true);
 diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme_manager.cpp
-index 39f60bf..07849bb 100644
+index 39f60bf..0419008 100644
 --- a/editor/themes/editor_theme_manager.cpp
 +++ b/editor/themes/editor_theme_manager.cpp
-@@ -232,6 +232,11 @@ Ref<EditorTheme> EditorThemeManager::_create_base_theme(const Ref<EditorTheme> &
+@@ -232,6 +232,15 @@ Ref<EditorTheme> EditorThemeManager::_create_base_theme(const Ref<EditorTheme> &
  
  	_populate_text_editor_styles(theme, config);
  	_populate_visual_shader_styles(theme, config);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		theme->set_constant("phone_pan_axis_lock", "TextEdit", 1);
++		theme->set_constant("phone_pan_percent", "TextEdit", CLAMP((int)EDITOR_GET("interface/touchscreen/phone_text_pan_percent"), 25, 200));
++	}
 +#ifdef ANDROID_ENABLED
 +	if (config.enable_touch_optimizations && !OS::get_singleton()->has_feature("xr_editor")) {
 +		theme->set_constant("phone_pan_percent", "TextEdit", CLAMP((int)EDITOR_GET("interface/touchscreen/phone_text_pan_percent"), 25, 200));
@@ -1207,7 +1491,7 @@ index 1fd7478..095efdc 100644
  	void process_pan(Point2 p_pos, Vector2 p_delta);
  	void process_joy_event(JoypadEvent p_event);
 diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
-index fcbb102..94beb85 100644
+index fcbb102..690e01d 100644
 --- a/platform/android/java/editor/build.gradle
 +++ b/platform/android/java/editor/build.gradle
 @@ -78,7 +78,7 @@ android {
@@ -1224,13 +1508,13 @@ index fcbb102..94beb85 100644
          missingDimensionStrategy 'products', 'editor'
          manifestPlaceholders += [
 -            editorAppName: "Godot Engine 4",
-+            editorAppName: "Godot Phone Preview 3.1",
++            editorAppName: "Godot Phone Preview 3.2",
              editorBuildSuffix: ""
          ]
  
 @@ -118,6 +118,12 @@ android {
      }
-
+ 
      signingConfigs {
 +        debug {
 +            storeFile file("src/main/assets/keystores/debug.keystore")
@@ -1241,6 +1525,14 @@ index fcbb102..94beb85 100644
          release {
              storeFile getGodotKeystoreFile()
              storePassword getGodotSigningPassword()
+@@ -199,6 +205,7 @@ android {
+ }
+ 
+ dependencies {
++	testImplementation "junit:junit:4.13.2"
+     implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+ 
+     implementation "androidx.fragment:fragment:$versions.fragmentVersion"
 diff --git a/platform/android/java/editor/src/main/AndroidManifest.xml b/platform/android/java/editor/src/main/AndroidManifest.xml
 index e6bbada..6df0c06 100644
 --- a/platform/android/java/editor/src/main/AndroidManifest.xml
@@ -1292,6 +1584,263 @@ index fee970b..cba6093 100644
  		}
  		val info = context.packageManager.resolveService(intent, 0)
  		if (info == null) {
+diff --git a/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt b/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt
+index 404521b..0639462 100644
+--- a/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt
++++ b/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt
+@@ -92,9 +92,17 @@ class EmbeddedGodotGame : GodotGame() {
+ 	private val lockAspectRatioCheckBox: CheckBox by lazy { findViewById(R.id.lockAspectRatioCheckBox) }
+ 	private val cornerHandles = mutableListOf<View>()
+ 
+-	private val screenBounds: android.graphics.Rect by lazy {
+-		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+-			windowManager.currentWindowMetrics.bounds
++	private val screenBounds: android.graphics.Rect get() {
++		return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
++			// Current metrics describe this floating window, not the available display.
++			// Re-read on every use: cached landscape bounds are invalid after rotation.
++			val metrics = windowManager.maximumWindowMetrics
++			val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
++				android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout()
++			)
++			android.graphics.Rect(0, 0,
++				(metrics.bounds.width() - insets.left - insets.right).coerceAtLeast(1),
++				(metrics.bounds.height() - insets.top - insets.bottom).coerceAtLeast(1))
+ 		} else {
+ 			val size = Point()
+ 			windowManager.defaultDisplay.getRealSize(size)
+@@ -102,8 +110,10 @@ class EmbeddedGodotGame : GodotGame() {
+ 		}
+ 	}
+ 
+-	private val maxAllowedWidth: Int get() = (screenBounds.width() * MAX_SCREEN_PERCENT).toInt()
+-	private val maxAllowedHeight: Int get() = (screenBounds.height() * MAX_SCREEN_PERCENT).toInt()
++	private val maxAllowedWidth: Int get() = (screenBounds.width() * MAX_SCREEN_PERCENT).toInt().coerceAtLeast(1)
++	private val maxAllowedHeight: Int get() = (screenBounds.height() * MAX_SCREEN_PERCENT).toInt().coerceAtLeast(1)
++	private val minAllowedWidth: Int get() = minOf(MIN_WINDOW_SIZE, maxAllowedWidth)
++	private val minAllowedHeight: Int get() = minOf(MIN_WINDOW_SIZE, maxAllowedHeight)
+ 
+ 	private var lockedAspectRatio: Float = 1.6f
+ 
+@@ -135,6 +145,31 @@ class EmbeddedGodotGame : GodotGame() {
+ 
+ 	override fun getGodotAppLayout() = R.layout.godot_embedded_game_layout
+ 
++	private fun fitWindowBounds(lp: WindowManager.LayoutParams) {
++		if (isFullscreen) return
++		val bounds = screenBounds
++		val fitted = fitPhoneGameWindow(lp.x, lp.y, lp.width, lp.height,
++			bounds.width(), bounds.height(), !isFreeResize)
++		lp.x = fitted.x
++		lp.y = fitted.y
++		lp.width = fitted.width
++		lp.height = fitted.height
++		layoutWidthInPx = fitted.width
++		layoutHeightInPx = fitted.height
++	}
++
++	override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
++		super.onConfigurationChanged(newConfig)
++		window.decorView.post {
++			if (!isFullscreen) {
++				val lp = window.attributes
++				fitWindowBounds(lp)
++				window.attributes = lp
++				updateLabelText(lp.width, lp.height)
++			}
++		}
++	}
++
+ 	private fun setupOverlayUI() {
+ 		lockAspectRatioCheckBox.isChecked = !isFreeResize
+ 
+@@ -256,9 +291,9 @@ class EmbeddedGodotGame : GodotGame() {
+ 
+ 		when (activeCorner) {
+ 			Gravity.TOP or Gravity.START -> {
+-				newW = (initialWidth - dx).coerceIn(MIN_WINDOW_SIZE, maxAllowedWidth)
++				newW = (initialWidth - dx).coerceIn(minAllowedWidth, maxAllowedWidth)
+ 				newH = if (isFreeResize) {
+-					(initialHeight - dy).coerceIn(MIN_WINDOW_SIZE, maxAllowedHeight)
++					(initialHeight - dy).coerceIn(minAllowedHeight, maxAllowedHeight)
+ 				} else {
+ 					(newW / lockedAspectRatio).toInt()
+ 				}
+@@ -267,9 +302,9 @@ class EmbeddedGodotGame : GodotGame() {
+ 			}
+ 
+ 			Gravity.TOP or Gravity.END -> {
+-				newW = (initialWidth + dx).coerceIn(MIN_WINDOW_SIZE, maxAllowedWidth)
++				newW = (initialWidth + dx).coerceIn(minAllowedWidth, maxAllowedWidth)
+ 				newH = if (isFreeResize) {
+-					(initialHeight - dy).coerceIn(MIN_WINDOW_SIZE, maxAllowedHeight)
++					(initialHeight - dy).coerceIn(minAllowedHeight, maxAllowedHeight)
+ 				} else {
+ 					(newW / lockedAspectRatio).toInt()
+ 				}
+@@ -277,9 +312,9 @@ class EmbeddedGodotGame : GodotGame() {
+ 			}
+ 
+ 			Gravity.BOTTOM or Gravity.START -> {
+-				newW = (initialWidth - dx).coerceIn(MIN_WINDOW_SIZE, maxAllowedWidth)
++				newW = (initialWidth - dx).coerceIn(minAllowedWidth, maxAllowedWidth)
+ 				newH = if (isFreeResize) {
+-					(initialHeight + dy).coerceIn(MIN_WINDOW_SIZE, maxAllowedHeight)
++					(initialHeight + dy).coerceIn(minAllowedHeight, maxAllowedHeight)
+ 				} else {
+ 					(newW / lockedAspectRatio).toInt()
+ 				}
+@@ -287,9 +322,9 @@ class EmbeddedGodotGame : GodotGame() {
+ 			}
+ 
+ 			Gravity.BOTTOM or Gravity.END -> {
+-				newW = (initialWidth + dx).coerceIn(MIN_WINDOW_SIZE, maxAllowedWidth)
++				newW = (initialWidth + dx).coerceIn(minAllowedWidth, maxAllowedWidth)
+ 				newH = if (isFreeResize) {
+-					(initialHeight + dy).coerceIn(MIN_WINDOW_SIZE, maxAllowedHeight)
++					(initialHeight + dy).coerceIn(minAllowedHeight, maxAllowedHeight)
+ 				} else {
+ 					(newW / lockedAspectRatio).toInt()
+ 				}
+@@ -301,9 +336,9 @@ class EmbeddedGodotGame : GodotGame() {
+ 			// Cap height based on both max height and width-constrained limit.
+ 			// effectiveMaxHeight helps ensure that the width (newW) calculated below is guaranteed to be <= maxAllowedWidth.
+ 			val maxHeightFromWidth = (maxAllowedWidth / lockedAspectRatio).toInt()
+-			val effectiveMaxHeight = minOf(maxAllowedHeight, maxHeightFromWidth)
++			val effectiveMaxHeight = minOf(maxAllowedHeight, maxHeightFromWidth).coerceAtLeast(1)
+ 
+-			val clampedH = newH.coerceIn(MIN_WINDOW_SIZE, effectiveMaxHeight)
++			val clampedH = newH.coerceIn(minOf(MIN_WINDOW_SIZE, effectiveMaxHeight), effectiveMaxHeight)
+ 
+ 			if (clampedH != newH) {
+ 				newH = clampedH
+@@ -321,6 +356,7 @@ class EmbeddedGodotGame : GodotGame() {
+ 
+ 		layoutParams.width = newW
+ 		layoutParams.height = newH
++		fitWindowBounds(layoutParams)
+ 
+ 		val hittingLimit = newW >= maxAllowedWidth || newH >= maxAllowedHeight
+ 		lockAspectRatioCheckBox.setTextColor(if (hittingLimit) Color.RED else Color.WHITE)
+@@ -340,6 +376,8 @@ class EmbeddedGodotGame : GodotGame() {
+ 		if (isFullscreen) return
+ 
+ 		val layoutParams = window.attributes
++		fitWindowBounds(layoutParams)
++		window.attributes = layoutParams
+ 		layoutWidthInPx = layoutParams.width
+ 		layoutHeightInPx = layoutParams.height
+ 		getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().apply {
+@@ -364,6 +402,7 @@ class EmbeddedGodotGame : GodotGame() {
+ 		layoutParams.y = prefs.getInt(KEY_Y, screenBounds.height() - layoutHeightInPx)
+ 		layoutParams.width = layoutWidthInPx
+ 		layoutParams.height = layoutHeightInPx
++		fitWindowBounds(layoutParams)
+ 		lockedAspectRatio = layoutParams.width.toFloat() / layoutParams.height.toFloat().coerceAtLeast(1f)
+ 		updateLabelText(layoutWidthInPx, layoutHeightInPx)
+ 	}
+@@ -384,6 +423,7 @@ class EmbeddedGodotGame : GodotGame() {
+ 			MotionEvent.ACTION_MOVE -> {
+ 				lp.x = (initialWinX + (event.rawX - initialTouchX)).toInt()
+ 				lp.y = (initialWinY + (event.rawY - initialTouchY)).toInt()
++				fitWindowBounds(lp)
+ 				window.attributes = lp
+ 				return true
+ 			}
+@@ -437,7 +477,11 @@ class EmbeddedGodotGame : GodotGame() {
+ 			gameRequestedOrientation = requestedOrientation
+ 			requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+ 		}
+-		updateWindowDimensions(layoutWidthInPx, layoutHeightInPx)
++		// Keep x/y from the same fitted object; fetching attributes again loses them.
++		layoutParams.width = layoutWidthInPx
++		layoutParams.height = layoutHeightInPx
++		fitWindowBounds(layoutParams)
++		window.attributes = layoutParams
+ 		gameMenuFragment?.refreshButtonsVisibility()
+ 	}
+ 
+@@ -445,6 +489,7 @@ class EmbeddedGodotGame : GodotGame() {
+ 		val layoutParams = window.attributes
+ 		layoutParams.width = widthInPx
+ 		layoutParams.height = heightInPx
++		fitWindowBounds(layoutParams)
+ 		window.attributes = layoutParams
+ 	}
+ 
+@@ -456,3 +501,25 @@ class EmbeddedGodotGame : GodotGame() {
+ 
+ 	override fun shouldShowGameMenuBar() = gameMenuContainer != null
+ }
++
++internal data class PhoneGameWindowBounds(val x: Int, val y: Int, val width: Int, val height: Int)
++
++// Pure geometry used by creation, restore, drag, resize and orientation changes.
++internal fun fitPhoneGameWindow(x: Int, y: Int, width: Int, height: Int,
++	screenWidth: Int, screenHeight: Int, preserveAspect: Boolean): PhoneGameWindowBounds {
++	val sw = screenWidth.coerceAtLeast(1)
++	val sh = screenHeight.coerceAtLeast(1)
++	val maxW = (sw * 0.9).toInt().coerceAtLeast(1)
++	val maxH = (sh * 0.9).toInt().coerceAtLeast(1)
++	var w = if (width > 0) width else minOf(400, maxW)
++	var h = if (height > 0) height else minOf(400, maxH)
++	if (preserveAspect) {
++		val factor = minOf(1.0, maxW.toDouble() / w, maxH.toDouble() / h)
++		w = (w * factor).toInt().coerceIn(1, maxW)
++		h = (h * factor).toInt().coerceIn(1, maxH)
++	} else {
++		w = w.coerceAtMost(maxW)
++		h = h.coerceAtMost(maxH)
++	}
++	return PhoneGameWindowBounds(x.coerceIn(0, sw - w), y.coerceIn(0, sh - h), w, h)
++}
+diff --git a/platform/android/java/editor/src/main/res/layout/game_menu_fragment_layout.xml b/platform/android/java/editor/src/main/res/layout/game_menu_fragment_layout.xml
+index f372515..0a2d6c1 100644
+--- a/platform/android/java/editor/src/main/res/layout/game_menu_fragment_layout.xml
++++ b/platform/android/java/editor/src/main/res/layout/game_menu_fragment_layout.xml
+@@ -8,6 +8,8 @@
+ 	<HorizontalScrollView
+ 		android:layout_width="0dp"
+ 		android:layout_height="wrap_content"
++		android:scrollbars="horizontal"
++		android:fadeScrollbars="false"
+ 		android:layout_weight="1">
+ 
+ 		<LinearLayout
+@@ -153,9 +155,6 @@
+ 				android:background="@drawable/game_menu_button_bg"
+ 				android:src="@drawable/audio_player_icon_selector" />
+ 
+-		</LinearLayout>
+-	</HorizontalScrollView>
+-
+ 	<ImageButton
+ 		android:id="@+id/game_menu_options_button"
+ 		style="?android:attr/borderlessButtonStyle"
+@@ -205,12 +204,15 @@
+ 		android:layout_height="48dp"
+ 		android:background="@drawable/game_menu_selected_button_bg"
+ 		android:src="@drawable/baseline_picture_in_picture_alt_24"/>
++		</LinearLayout>
++	</HorizontalScrollView>
+ 
+ 	<ImageButton
+ 		android:id="@+id/game_menu_fullscreen_button"
+ 		style="?android:attr/borderlessButtonStyle"
+ 		android:layout_width="48dp"
+ 		android:layout_height="48dp"
++		android:contentDescription="Развернуть игровое окно"
+ 		android:background="@drawable/game_menu_selected_button_bg"
+ 		android:src="@drawable/baseline_fullscreen_selector"/>
+ 
+@@ -219,6 +221,7 @@
+ 		style="?android:attr/borderlessButtonStyle"
+ 		android:layout_width="48dp"
+ 		android:layout_height="48dp"
++		android:contentDescription="Закрыть игровое окно"
+ 		android:background="@drawable/game_menu_button_bg"
+ 		android:src="@drawable/baseline_close_24"/>
+ </LinearLayout>
 diff --git a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt b/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt
 index a2d743e..b9004d0 100644
 --- a/platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt
@@ -1550,7 +2099,7 @@ index 3a607c1..f0fd2c0 100644
  	bool is_code_completion_scroll_hovered = false;
  	bool is_code_completion_scroll_pressed = false;
 diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
-index cd092bd..57b124e 100644
+index cd092bd..8e91177 100644
 --- a/scene/gui/text_edit.cpp
 +++ b/scene/gui/text_edit.cpp
 @@ -891,7 +891,70 @@ void TextEdit::_notification(int p_what) {
@@ -1729,7 +2278,7 @@ index cd092bd..57b124e 100644
  					if (dragging_minimap) {
  						return;
  					}
-@@ -2507,89 +2640,305 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2507,91 +2640,312 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
  					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
  				}
@@ -1835,6 +2384,7 @@ index cd092bd..57b124e 100644
 +
 +			drag_speed = Vector2();
 +			drag_accum = Vector2();
++			phone_pan_lock.reset();
 +			last_drag_accum = Vector2();
 +			drag_from = Vector2(prev_h_scroll, prev_v_scroll);
 +			touch_dragging_deaccel = false;
@@ -1974,7 +2524,11 @@ index cd092bd..57b124e 100644
 +					if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
 +						DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
 +					}
-+
+ 
+-			if (drag_caret_index == -1) {
+-				// Force create a new caret for drag and drop.
+-				carets.push_back(Caret());
+-				drag_caret_index = carets.size() - 1;
 +					// Avoid showing the virtual keyboard when released on the minimap, or pan gesture performed.
 +					if (editable && !dragging_minimap && !pan_gesture_performed) {
 +						_show_virtual_keyboard();
@@ -1991,21 +2545,21 @@ index cd092bd..57b124e 100644
 +				} else {
 +					touch_dragging_deaccel = true;
 +				}
-+			}
-+
+ 			}
+ 
+-			drag_caret_force_displayed = true;
+-			set_caret_line(pos.y, false, true, -1, drag_caret_index);
+-			set_caret_column(pos.x, true, drag_caret_index);
+-			dragging_selection = true;
 +			touch_dragging_starting = false;
 +			touch_dragging_in_progress = false;
-+		}
-+	}
-+
+ 		}
+ 	}
+ 
 +	Ref<InputEventScreenDrag> drag = p_gui_input;
 +	if (drag.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		show_selection_handle = true; // Showing selection handle because native touch input is used.
- 
--			if (drag_caret_index == -1) {
--				// Force create a new caret for drag and drop.
--				carets.push_back(Caret());
--				drag_caret_index = carets.size() - 1;
++
 +		if (selection_handle_drag_type != SELECTION_HANDLE_NONE) {
 +			Vector2 corrected_text_pos = drag->get_position() - selection_handle_drag_offset;
 +			Point2i pos = get_line_column_at_pos(corrected_text_pos);
@@ -2015,12 +2569,8 @@ index cd092bd..57b124e 100644
 +				select(get_selection_origin_line(c), get_selection_origin_column(c), pos.y, pos.x, c);
 +			} else {
 +				select(pos.y, pos.x, get_caret_line(c), get_caret_column(c), c);
- 			}
- 
--			drag_caret_force_displayed = true;
--			set_caret_line(pos.y, false, true, -1, drag_caret_index);
--			set_caret_column(pos.x, true, drag_caret_index);
--			dragging_selection = true;
++			}
++
 +			accept_event();
 +			return;
 +		}
@@ -2029,6 +2579,10 @@ index cd092bd..57b124e 100644
 +		if (touch_dragging_starting && !touch_dragging_deaccel) {
 +			touch_dragging_in_progress = true;
 +			Vector2 motion = drag->get_relative();
++			if (has_theme_constant("phone_pan_axis_lock", "TextEdit") && get_theme_constant("phone_pan_axis_lock", "TextEdit")) {
++				motion = phone_pan_lock.filter(motion);
++				motion *= get_theme_constant("phone_pan_percent", "TextEdit") / 100.0;
++			}
 +
 +			drag_accum -= motion;
 +
@@ -2079,7 +2633,7 @@ index cd092bd..57b124e 100644
 +		h_scroll->set_value(h_scroll->get_value() + pan_delta.x * horizontal_multiplier);
 +		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
 +			accept_event(); // Accept event if scroll changed.
- 		}
++		}
 +		queue_accessibility_update();
 +
 +		return;
@@ -2089,10 +2643,12 @@ index cd092bd..57b124e 100644
 +
 +	if (mm.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		_on_drag_or_mouse_motion_event(mm->get_position(), mm->get_button_mask().has_flag(MouseButtonMask::LEFT));
- 	}
- 
++	}
++
  	if (draw_minimap && !dragging_selection) {
-@@ -2884,6 +3233,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 		_update_minimap_hover();
+ 	}
+@@ -2884,6 +3238,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  	}
  }
  
@@ -2165,7 +2721,7 @@ index cd092bd..57b124e 100644
  /* Input actions. */
  void TextEdit::_swap_current_input_direction() {
  	if (input_direction == TEXT_DIRECTION_LTR) {
-@@ -3410,6 +3825,10 @@ void TextEdit::_update_theme_item_cache() {
+@@ -3410,6 +3830,10 @@ void TextEdit::_update_theme_item_cache() {
  	if (text.get_line_height() + theme_cache.line_spacing < 1) {
  		WARN_PRINT("Line height is too small, please increase font_size and/or line_spacing");
  	}
@@ -2176,7 +2732,7 @@ index cd092bd..57b124e 100644
  }
  
  void TextEdit::_update_caches(bool p_invalidate_all) {
-@@ -3491,6 +3910,15 @@ void TextEdit::_update_ime_text() {
+@@ -3491,6 +3915,15 @@ void TextEdit::_update_ime_text() {
  	queue_redraw();
  }
  
@@ -2192,7 +2748,7 @@ index cd092bd..57b124e 100644
  void TextEdit::_show_virtual_keyboard() {
  	_update_ime_window_position();
  
-@@ -6378,6 +6806,14 @@ void TextEdit::delete_selection(int p_caret) {
+@@ -6378,6 +6811,14 @@ void TextEdit::delete_selection(int p_caret) {
  	end_complex_operation();
  }
  
@@ -2207,7 +2763,7 @@ index cd092bd..57b124e 100644
  /* Line wrapping. */
  void TextEdit::set_line_wrapping_mode(LineWrappingMode p_wrapping_mode) {
  	if (line_wrapping_mode != p_wrapping_mode) {
-@@ -7463,6 +7899,9 @@ void TextEdit::_bind_methods() {
+@@ -7463,6 +7904,9 @@ void TextEdit::_bind_methods() {
  	ClassDB::bind_method(D_METHOD("deselect", "caret_index"), &TextEdit::deselect, DEFVAL(-1));
  	ClassDB::bind_method(D_METHOD("delete_selection", "caret_index"), &TextEdit::delete_selection, DEFVAL(-1));
  
@@ -2217,7 +2773,7 @@ index cd092bd..57b124e 100644
  	/* Line wrapping. */
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_NONE);
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_BOUNDARY);
-@@ -7625,6 +8064,7 @@ void TextEdit::_bind_methods() {
+@@ -7625,6 +8069,7 @@ void TextEdit::_bind_methods() {
  	ADD_PROPERTY(PropertyInfo(Variant::INT, "autowrap_mode", PROPERTY_HINT_ENUM, "Arbitrary:1,Word:2,Word (Smart):3"), "set_autowrap_mode", "get_autowrap_mode");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "indent_wrapped_lines"), "set_indent_wrapped_lines", "is_indent_wrapped_lines");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tab_input_mode"), "set_tab_input_mode", "get_tab_input_mode");
@@ -2225,7 +2781,7 @@ index cd092bd..57b124e 100644
  
  	ADD_GROUP("Virtual Keyboard", "virtual_keyboard_");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_keyboard_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_virtual_keyboard_enabled", "is_virtual_keyboard_enabled");
-@@ -8508,9 +8948,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
+@@ -8508,9 +8953,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
  }
  
  void TextEdit::_update_selection_mode_word(bool p_initial) {
@@ -2240,7 +2796,7 @@ index cd092bd..57b124e 100644
  	int line = pos.y;
  	int column = pos.x;
  	int caret_index = get_caret_count() - 1;
-@@ -8992,8 +9436,8 @@ void TextEdit::_update_minimap_hover() {
+@@ -8992,8 +9441,8 @@ void TextEdit::_update_minimap_hover() {
  	}
  }
  
@@ -2251,7 +2807,7 @@ index cd092bd..57b124e 100644
  
  	int xmargin_end = get_size().width - Math::floor(_get_current_stylebox()->get_margin(SIDE_RIGHT));
  	if (!dragging_minimap && (mp.x < xmargin_end - minimap_width || mp.x > xmargin_end)) {
-@@ -9022,7 +9466,7 @@ void TextEdit::_update_minimap_click() {
+@@ -9022,7 +9471,7 @@ void TextEdit::_update_minimap_click() {
  	}
  }
  
@@ -2260,7 +2816,7 @@ index cd092bd..57b124e 100644
  	if (!can_drag_minimap) {
  		return;
  	}
-@@ -9033,7 +9477,7 @@ void TextEdit::_update_minimap_drag() {
+@@ -9033,7 +9482,7 @@ void TextEdit::_update_minimap_drag() {
  		control_height = scroll_height;
  	}
  
@@ -2270,10 +2826,37 @@ index cd092bd..57b124e 100644
  	double diff = (mp.y - minimap_scroll_click_pos) / control_height;
  	v_scroll->set_as_ratio(minimap_scroll_ratio + diff);
 diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
-index 8470ccc..cb24cfd 100644
+index 8470ccc..0a7f0b0 100644
 --- a/scene/gui/text_edit.h
 +++ b/scene/gui/text_edit.h
-@@ -510,11 +510,42 @@ private:
+@@ -37,6 +37,26 @@
+ #include "scene/resources/syntax_highlighter.h"
+ #include "scene/resources/text_paragraph.h"
+ 
++// Choose a direction once per finger drag, retaining motion below the threshold.
++// Only the phone editor opts in; selection handles and two-finger pan stay free.
++struct TextEditTouchAxisLock {
++	Vector2 pending;
++	int axis = 0;
++	void reset() { pending = Vector2(); axis = 0; }
++	Vector2 filter(Vector2 p_motion) {
++		if (axis == 0) {
++			pending += p_motion;
++			if (pending.length_squared() < 64.0) {
++				return Vector2();
++			}
++			axis = Math::abs(pending.x) > Math::abs(pending.y) * 1.4 ? 1 : 2;
++			p_motion = pending;
++			pending = Vector2();
++		}
++		return axis == 1 ? Vector2(p_motion.x, 0) : Vector2(0, p_motion.y);
++	}
++};
++
+ class TextEdit : public Control {
+ 	GDCLASS(TextEdit, Control);
+ 
+@@ -510,11 +530,43 @@ private:
  	uint64_t last_dblclk = 0;
  	Vector2 last_dblclk_pos;
  
@@ -2281,6 +2864,7 @@ index 8470ccc..cb24cfd 100644
 +	bool touch_dragging_in_progress = false;
 +	bool touch_dragging_deaccel = false;
 +	Vector2 drag_accum;
++	TextEditTouchAxisLock phone_pan_lock;
 +	Vector2 drag_from;
 +	Vector2 drag_speed;
 +	Vector2 last_drag_accum;
@@ -2316,7 +2900,7 @@ index 8470ccc..cb24cfd 100644
  	void _update_selection_mode_line(bool p_initial = false);
  
  	void _pre_shift_selection(int p_caret);
-@@ -585,8 +616,8 @@ private:
+@@ -585,8 +637,8 @@ private:
  	double minimap_scroll_click_pos = 0.0;
  
  	void _update_minimap_hover();
@@ -2327,7 +2911,7 @@ index 8470ccc..cb24cfd 100644
  
  	/* Gutters. */
  	Vector<GutterInfo> gutters;
-@@ -840,6 +871,7 @@ public:
+@@ -840,6 +892,7 @@ public:
  	void set_shortcut_keys_enabled(bool p_enabled);
  	bool is_shortcut_keys_enabled() const;
  
@@ -2335,7 +2919,7 @@ index 8470ccc..cb24cfd 100644
  	void set_virtual_keyboard_enabled(bool p_enabled);
  	bool is_virtual_keyboard_enabled() const;
  
-@@ -1040,6 +1072,9 @@ public:
+@@ -1040,6 +1093,9 @@ public:
  	void deselect(int p_caret = -1);
  	void delete_selection(int p_caret = -1);
  

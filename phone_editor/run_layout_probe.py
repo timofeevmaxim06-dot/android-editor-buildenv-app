@@ -49,8 +49,8 @@ def main():
             if checkpoints and elapsed >= checkpoints[0]:
                 mark = checkpoints.pop(0)
                 diagnose(process, output, elapsed, stack=mark == 90)
-            if elapsed >= 180:
-                print("PHONE_LAYOUT_TIMEOUT: no completed result within 180 seconds", flush=True)
+            if elapsed >= 300:
+                print("PHONE_LAYOUT_TIMEOUT: no completed result within 300 seconds", flush=True)
                 os.killpg(process.pid, signal.SIGTERM)
                 try:
                     process.wait(timeout=5)

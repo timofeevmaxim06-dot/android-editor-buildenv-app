@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     (validate if args.check else apply)(args.source.resolve())
-    print(json.dumps({"preview": "3.1", "status": "VALIDATED" if args.check else "PATCHED",
+    print(json.dumps({"preview": "3.2", "status": "VALIDATED" if args.check else "PATCHED",
                       "godot_commit": GODOT_COMMIT, "app_id": APP_ID,
                       "patch_sha256": MANIFEST["patch_sha256"],
                       "files": sorted(MANIFEST["files"])}, indent=2))

@@ -187,10 +187,15 @@ func _press_text_tool(editor: Control, name: String, native_tap := false) -> voi
 		_expect(false, "Missing text action " + name)
 		return
 	var tools := editor.find_child("PhoneCodeTools", true, false) as ScrollContainer
-	tools.ensure_control_visible(button)
+	var in_more := tools.is_ancestor_of(button)
+	if in_more:
+		if not tools.is_visible_in_tree():
+			await _tap_button(editor.find_child("PhoneMore", true, false) as Button)
+		tools.ensure_control_visible(button)
 	await _settle(8)
 	_inside_window(button, name)
-	_expect(tools.get_global_rect().grow(2).encloses(button.get_global_rect()), name + " is clipped by the toolbar")
+	var bounds := tools if in_more else editor.find_child("PhoneCodePrimary", true, false) as Control
+	_expect(bounds.get_global_rect().grow(2).encloses(button.get_global_rect()), name + " is clipped by the toolbar")
 	var hits := [0]
 	var record_press := func(): hits[0] += 1
 	button.pressed.connect(record_press)
@@ -209,11 +214,181 @@ func _press_text_tool(editor: Control, name: String, native_tap := false) -> voi
 			await _settle(3)
 	button.pressed.disconnect(record_press)
 	_expect(hits[0] == 1, name + " did not receive exactly one real click/tap")
+	_expect(not tools.is_visible_in_tree(), name + " left the extra commands covering code")
+
+func _tap_button(button: Button) -> void:
+	_expect(button != null and button.is_visible_in_tree(), "Missing visible button")
+	if button == null or not button.is_visible_in_tree():
+		return
+	_inside_window(button, button.name)
+	var point := button.get_global_rect().get_center()
+	await _touch(point, true)
+	await _touch(point, false)
+	await _settle(6)
+
+func _test_direction_lock(editor: Control, code: CodeEdit) -> void:
+	_mark("direction_lock_and_wrap")
+	var original := code.text
+	var was_wrap := code.get_line_wrapping_mode() != TextEdit.LINE_WRAPPING_NONE
+	if was_wrap:
+		await _press_text_tool(editor, "PhoneWrap")
+	code.text = ("# " + "long_word ".repeat(120) + "\n").repeat(80)
+	code.grab_focus()
+	var emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = true
+	for reading in [false, true]:
+		if reading:
+			await _press_text_tool(editor, "PhoneScrollMode")
+		for movement in [Vector2(3, -20), Vector2(-20, 3)]:
+			# Stop previous inertia, then establish a known scroll position.
+			var point := code.global_position + code.size * Vector2(0.4, 0.6)
+			await _touch(point, true)
+			await _touch(point, false)
+			code.set_caret_line(0)
+			code.set_caret_column(3)
+			code.deselect()
+			code.set_h_scroll(200)
+			code.set_v_scroll(8)
+			await _settle()
+			var state := [code.text, code.get_caret_line(), code.get_caret_column(), code.get_selected_text()]
+			var h := code.get_h_scroll()
+			var v := code.get_v_scroll()
+			await _touch(point, true)
+			for step in range(1, 6):
+				var drag := InputEventScreenDrag.new()
+				drag.index = 0
+				drag.relative = movement
+				drag.position = point + movement * step
+				Input.parse_input_event(drag)
+				await _settle(3)
+			await _touch(point + movement * 5, false)
+			await _settle(10)
+			if movement.y < 0:
+				_expect(is_equal_approx(code.get_h_scroll(), h), "Vertical finger drag drifted horizontally, reading=" + str(reading))
+				_expect(code.get_v_scroll() > v, "Vertical finger drag failed to scroll")
+			else:
+				_expect(code.get_h_scroll() > h, "Intentional horizontal drag was blocked")
+				_expect(is_equal_approx(code.get_v_scroll(), v), "Horizontal drag drifted vertically")
+			_expect(state == [code.text, code.get_caret_line(), code.get_caret_column(), code.get_selected_text()], "Directional scrolling changed editing state")
+		if reading:
+			await _press_text_tool(editor, "PhoneScrollMode")
+	# Cancel the last native inertia before changing display settings.
+	var stop := code.global_position + code.size * Vector2(0.4, 0.4)
+	await _touch(stop, true)
+	await _touch(stop, false)
+	code.select(1, 2, 1, 6)
+	var saved := _font_edit_state(code)
+	await _press_text_tool(editor, "PhoneWrap")
+	_expect(code.get_line_wrapping_mode() == TextEdit.LINE_WRAPPING_BOUNDARY, "Wrap command did not enable wrapping")
+	_expect(code.get_h_scroll() == 0, "Wrapped code remained scrolled sideways")
+	_expect(_font_edit_state(code) == saved, "Wrapping changed text, caret, selection or history")
+	await _press_text_tool(editor, "PhoneWrap")
+	_expect(code.get_line_wrapping_mode() == TextEdit.LINE_WRAPPING_NONE, "Wrap command did not toggle off")
+	_expect(_font_edit_state(code) == saved, "Disabling wrapping changed editing state")
+	if was_wrap:
+		await _press_text_tool(editor, "PhoneWrap")
+	code.text = original
+	code.deselect()
+	code.set_h_scroll(0)
+	code.set_v_scroll(0)
+	Input.emulate_mouse_from_touch = emulation
+	observations.append({"control": "direction_lock_and_wrap", "scope": "Noisy vertical and intentional horizontal single-finger drags, both reading/edit modes; wrap without text/history changes"})
 
 func _font_edit_state(code: CodeEdit) -> Array:
 	return [code.text, code.get_caret_line(), code.get_caret_column(),
 		code.get_selected_text(), code.get_version(), code.has_undo(), code.has_redo(),
 		DisplayServer.clipboard_get(), code.has_focus()]
+
+func _menu_choose(button: MenuButton, index: int) -> void:
+	await _tap_button(button)
+	var popup := button.get_popup()
+	_expect(popup.visible, str(button.name) + " did not open")
+	_expect(index >= 0 and index < popup.item_count, "Missing menu item")
+	if index < 0 or index >= popup.item_count:
+		popup.hide()
+		return
+	popup.set_focused_item(index)
+	var event := InputEventKey.new()
+	event.keycode = KEY_ENTER
+	event.pressed = true
+	popup.push_input(event)
+	await _settle(6)
+	_expect(not popup.visible, "Selected menu stayed open")
+
+func _test_sections_and_context(base: Control) -> void:
+	_mark("sections_and_context")
+	var sections := base.find_child("PhoneSections", true, false) as MenuButton
+	await _tap_button(sections)
+	var menu := sections.get_popup()
+	var target := (base.find_child("PhoneDockInspectorDock", true, false) as Button).text
+	var index := -1
+	for i in range(menu.item_count):
+		if menu.get_item_text(i) == target:
+			index = i
+	_expect(menu.item_count >= 10, "Section chooser omitted editor sections")
+	menu.hide()
+	EditorInterface.get_selection().clear()
+	await _settle()
+	await _menu_choose(sections, index)
+	var choose := base.find_child("PhoneChooseNode", true, false) as Button
+	var label := base.find_child("PhoneSelectedNode", true, false) as Label
+	_expect(choose.is_visible_in_tree(), "Inspector has no route back to the scene tree")
+	_expect(label.text.contains("не выбран"), "Empty selection has misleading context")
+	await _tap_button(choose)
+	_expect((base.find_child("PhoneDockSceneTreeDock", true, false) as Button).button_pressed, "Choose node did not open Scene")
+	var root := EditorInterface.get_edited_scene_root()
+	EditorInterface.get_selection().add_node(root)
+	await _settle()
+	await _menu_choose(sections, index)
+	_expect(label.text.contains(str(root.name)), "Selected node name is missing from context")
+	EditorInterface.get_selection().clear()
+	observations.append({"control": "sections_and_context", "scope": "Real section-menu activation, scene return and selected node label"})
+
+func _test_2d_tools(base: Control) -> void:
+	_mark("phone_2d_tools")
+	EditorInterface.set_main_screen_editor("2D")
+	await _settle()
+	var pan := base.find_child("Phone2DPan", true, false) as Button
+	var select := base.find_child("Phone2DSelect", true, false) as Button
+	var frame := base.find_child("Phone2DFrame", true, false) as MenuButton
+	await _tap_button(pan)
+	_expect(pan.button_pressed and not select.button_pressed, "2D overview mode is not active")
+	var root := EditorInterface.get_edited_scene_root()
+	var marker := Node2D.new()
+	marker.name = "PhoneProbeMarker"
+	marker.position = Vector2(900, 600)
+	root.add_child(marker)
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(marker)
+	await _settle()
+	var surface := base.find_child("Phone2DViewport", true, false) as Control
+	var point := surface.get_global_rect().get_center()
+	var viewport := EditorInterface.get_editor_viewport_2d()
+	var before := viewport.global_canvas_transform
+	var emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = true
+	await _touch(point, true)
+	for step in range(1, 6):
+		var drag := InputEventScreenDrag.new()
+		drag.index = 0
+		drag.relative = Vector2(12, 9)
+		drag.position = point + drag.relative * step
+		Input.parse_input_event(drag)
+		await _settle(3)
+	await _touch(point + Vector2(60, 45), false)
+	_expect(not viewport.global_canvas_transform.is_equal_approx(before), "2D overview drag did not move the view")
+	_expect(marker.position == Vector2(900, 600), "2D overview drag moved the scene object")
+	_expect(EditorInterface.get_selection().get_selected_nodes() == [marker], "2D overview drag changed selection")
+	await _menu_choose(frame, 0)
+	await _menu_choose(frame, 1)
+	await _menu_choose(frame, 2)
+	_expect(marker.position == Vector2(900, 600), "Framing changed scene content")
+	await _tap_button(select)
+	_expect(select.button_pressed and not pan.button_pressed, "Could not return to 2D selection mode")
+	EditorInterface.get_selection().clear()
+	marker.queue_free()
+	Input.emulate_mouse_from_touch = emulation
+	observations.append({"control": "phone_2d_tools", "scope": "Native tap and drag, mode feedback, frame commands without object movement"})
 
 func _test_font_tools(editor: Control, code: CodeEdit, output: String) -> void:
 	_mark("font_tools")
@@ -280,7 +455,11 @@ func _test_text_tools(base: Control, output: String) -> void:
 		_expect(false, "Phone code tools were not created")
 		return
 	_inside_window(code, "code editor")
-	_inside_window(tools, "code tools")
+	var primary := editor.find_child("PhoneCodePrimary", true, false) as Control
+	_inside_window(primary, "primary code commands")
+	for name in ["PhonePaste", "PhoneUndo", "PhoneLeft", "PhoneRight", "PhoneFontLarger", "PhoneMore"]:
+		var button := editor.find_child(name, true, false) as Control
+		_expect(button.is_visible_in_tree() and primary.get_global_rect().encloses(button.get_global_rect()), name + " is not immediately accessible")
 	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Less than half the window remains for code in compact mode")
 	var status := editor.find_child("PhoneCodeStatus", true, false) as Control
 	_expect(status != null and not status.is_visible_in_tree(), "Compact mode did not hide the code status row")
@@ -336,6 +515,7 @@ func _test_text_tools(base: Control, output: String) -> void:
 	await _press_text_tool(editor, "PhoneUndo")
 	_expect(code.get_line(0) == "var имя = 42", "Cut could not be undone")
 	await _test_font_tools(editor, code, output)
+	await _test_direction_lock(editor, code)
 	code.text = "# строка для прокрутки\n".repeat(200)
 	code.deselect()
 	code.set_caret_line(0)
@@ -448,8 +628,9 @@ func _run_probe() -> void:
 			_expect(active.size.y >= window_size.y * 0.5, "Less than half the height remains for " + button_name)
 			if not show_workspace:
 				var tabs: TabContainer = null
-				if panels.get_child_count() > 0:
-					tabs = panels.get_child(0) as TabContainer
+				for child in panels.get_children():
+					if child is TabContainer:
+						tabs = child
 				_expect(tabs != null, "Native dock tab container is missing after " + button_name)
 				if tabs != null:
 					_expect(not tabs.tabs_visible, "Duplicated dock tabs remain visible")
@@ -469,6 +650,8 @@ func _run_probe() -> void:
 	for code_size in [Vector2i(1536, 691), Vector2i(691, 1536)]:
 		get_tree().root.size = code_size
 		await _settle()
+		await _test_sections_and_context(base)
+		await _test_2d_tools(base)
 		await _test_text_tools(base, output)
 		await _test_native_touch(base)
 	await _test_create_dialog(base)

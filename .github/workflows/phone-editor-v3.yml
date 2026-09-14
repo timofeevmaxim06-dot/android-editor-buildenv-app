@@ -1,8 +1,8 @@
-name: Godot Phone Preview 3.1
+name: Godot Phone Preview 3.2
 
 on:
   push:
-    branches: [phone-editor-preview3-polish-20260914]
+    branches: [phone-editor-preview32-20260914]
     paths:
       - 'phone_editor/**'
       - '.github/workflows/phone-editor-v3.yml'
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phone-editor-preview-31
+  group: phone-editor-preview-32
   cancel-in-progress: true
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
       - name: Upload test binary for diagnosis
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.1-linux-test-binary
+          name: godot-phone-preview-3.2-linux-test-binary
           path: godot/bin/godot.linuxbsd.editor.x86_64
           retention-days: 7
           if-no-files-found: error
@@ -118,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.1-layout
+          name: godot-phone-preview-3.2-layout
           path: layout-evidence/
           if-no-files-found: warn
           retention-days: 30
@@ -148,7 +148,7 @@ jobs:
           python recipe/phone_editor/test_mobile_patch_v3.py godot 2>&1 | tee evidence/source-tests.txt
           python recipe/phone_editor/apply_mobile_patch_v3.py godot | tee evidence/patch-manifest.json
           git -C godot diff --check
-          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.1.patch
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.2.patch
           cp recipe/phone_editor/README-v3.md evidence/README.md
           git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
           git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
@@ -204,6 +204,13 @@ jobs:
         with:
           path: godot/platform/android/java/lib/libs/tools/debug/arm64-v8a
           key: phone-android-v31-ed1daf0b-ndk29014206865-scons481-production-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json', 'recipe/phone_editor/apply_mobile_patch_v3.py', 'evidence/SWAPPY-SHA256.txt') }}
+      - name: Test Android window geometry and compile native UI sources
+        working-directory: godot/platform/android/java
+        run: |
+          mkdir -p editor/src/test/java/org/godotengine/editor/embed
+          cp "$GITHUB_WORKSPACE/recipe/phone_editor/tests/PhoneGameWindowBoundsTest.kt" editor/src/test/java/org/godotengine/editor/embed/
+          ./gradlew :editor:testAndroidDebugUnitTest --no-daemon
+          cp -R editor/build/test-results "$GITHUB_WORKSPACE/evidence/android-window-tests"
       - name: Compile ARM64 editor
         if: steps.android-native-cache.outputs.cache-hit != 'true'
         working-directory: godot
@@ -247,7 +254,7 @@ jobs:
       - name: Upload APK only after verification
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.1-apk
+          name: godot-phone-preview-3.2-apk
           path: deliverables/
           if-no-files-found: error
           retention-days: 30
@@ -255,7 +262,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.1-evidence
+          name: godot-phone-preview-3.2-evidence
           path: evidence/
           if-no-files-found: warn
           retention-days: 30
