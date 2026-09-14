@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "841bf804371c361d01b87a8dbcb7dbafcf13a77877d64f560b5213e1be29e911",
+  "patch_sha256": "bff31827b071a3edc0ace687c88e84d4e12f97cf8b1e969bff7b41427e80ac1c",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -12,7 +12,7 @@
     },
     "editor/docks/editor_dock_manager.cpp": {
       "before": "ced7fbc38c48f1f872c79e498612c957ca9e369b062ff8e8cb5bdb54a1541c6f",
-      "after": "9e1f26abbeb2ff3eb0d98208a97256c3b5f270211a7ae41f4e57ee5b7b472f7b"
+      "after": "7452cc3e434b6d1824eea097f3098adcb34e6a09e747ae173717adcadf37a8c1"
     },
     "editor/docks/editor_dock_manager.h": {
       "before": "e8cd2129eb2fbbb4c639b572e009839c610fb071418511042eebd4f465d0ccb7",

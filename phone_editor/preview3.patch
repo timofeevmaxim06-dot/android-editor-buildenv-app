@@ -39,7 +39,7 @@ index a469a50..c5d5c0f 100644
  	content->set_selection_enabled(p_allow_selection);
  	content->set_context_menu_enabled(p_allow_selection);
 diff --git a/editor/docks/editor_dock_manager.cpp b/editor/docks/editor_dock_manager.cpp
-index 50b991a..d023ba8 100644
+index 50b991a..79f8a52 100644
 --- a/editor/docks/editor_dock_manager.cpp
 +++ b/editor/docks/editor_dock_manager.cpp
 @@ -29,10 +29,14 @@
@@ -65,7 +65,7 @@ index 50b991a..d023ba8 100644
  #include "scene/gui/popup_menu.h"
  #include "scene/gui/split_container.h"
  #include "scene/gui/tab_container.h"
-@@ -195,7 +200,88 @@ void EditorDockManager::_update_layout() {
+@@ -195,7 +200,90 @@ void EditorDockManager::_update_layout() {
  	EditorNode::get_singleton()->save_editor_layout_delayed();
  }
  
@@ -126,8 +126,10 @@ index 50b991a..d023ba8 100644
 +	TypedArray<Node> nodes = EditorNode::get_singleton()->get_editor_selection()->get_selected_nodes();
 +	String label = String::utf8("Узел не выбран");
 +	if (nodes.size() == 1) {
-+		Node *node = nodes[0];
-+		label = String::utf8("В сцене: ") + node->get_name();
++		Node *node = Object::cast_to<Node>(nodes[0]);
++		if (node) {
++			label = String::utf8("В сцене: ") + node->get_name();
++		}
 +	} else if (nodes.size() > 1) {
 +		label = String::utf8("Выбрано узлов: ") + itos(nodes.size());
 +	}
@@ -154,7 +156,7 @@ index 50b991a..d023ba8 100644
  	docks_menu->clear();
  	docks_menu->reset_size();
  
-@@ -324,10 +410,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
+@@ -324,10 +412,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
  			p_window_dump.get("window_screen_rect", Rect2i()));
  }
  
@@ -212,7 +214,7 @@ index 50b991a..d023ba8 100644
  	Node *parent = p_dock->get_parent();
  	if (parent == p_target) {
  		if (parent && p_tab_index >= 0) {
-@@ -701,11 +834,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -701,11 +836,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  	}
  
  	DockTabContainer *tab_container = p_dock->get_parent_container();
@@ -230,7 +232,7 @@ index 50b991a..d023ba8 100644
  		tab_container->get_tab_bar()->grab_focus();
  	}
  
-@@ -713,6 +851,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -713,6 +853,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  		int tab_index = tab_container->get_tab_idx_from_control(p_dock);
  		tab_container->set_current_tab(tab_index);
  	}
@@ -238,7 +240,7 @@ index 50b991a..d023ba8 100644
  }
  
  void EditorDockManager::focus_dock(EditorDock *p_dock) {
-@@ -737,6 +876,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
+@@ -737,6 +878,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
  
  	p_dock->dock_slot_index = p_dock->default_slot;
  	all_docks.push_back(p_dock);
@@ -257,7 +259,7 @@ index 50b991a..d023ba8 100644
  	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  
-@@ -755,6 +906,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
+@@ -755,6 +908,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
  
  	_move_dock(p_dock, nullptr);
  
