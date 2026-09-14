@@ -2099,10 +2099,10 @@ index 3a607c1..f0fd2c0 100644
  	bool is_code_completion_scroll_hovered = false;
  	bool is_code_completion_scroll_pressed = false;
 diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
-index cd092bd..8e91177 100644
+index cd092bd..b856282 100644
 --- a/scene/gui/text_edit.cpp
 +++ b/scene/gui/text_edit.cpp
-@@ -891,7 +891,70 @@ void TextEdit::_notification(int p_what) {
+@@ -891,7 +891,72 @@ void TextEdit::_notification(int p_what) {
  		} break;
  
  		case NOTIFICATION_INTERNAL_PROCESS: {
@@ -2156,7 +2156,9 @@ index cd092bd..8e91177 100644
 +						turnoff_v = true;
 +					}
 +
-+					drag_speed = Vector2(sgn_x * val_x, sgn_y * val_y);
++					// A stopped axis must stay stopped while the other axis decelerates.
++					// Negative residual speed otherwise makes a vertical flick drift sideways.
++					drag_speed = Vector2(turnoff_h ? 0 : sgn_x * val_x, turnoff_v ? 0 : sgn_y * val_y);
 +
 +					if (turnoff_h && turnoff_v) {
 +						_cancel_inertial_scroll();
@@ -2174,7 +2176,7 @@ index cd092bd..8e91177 100644
  				double target_y = target_v_scroll - get_v_scroll();
  				double dist = std::abs(target_y);
  				// To ensure minimap is responsive override the speed setting.
-@@ -1955,6 +2018,25 @@ void TextEdit::_notification(int p_what) {
+@@ -1955,6 +2020,25 @@ void TextEdit::_notification(int p_what) {
  				}
  			}
  
@@ -2200,7 +2202,7 @@ index cd092bd..8e91177 100644
  			if (has_focus()) {
  				_update_ime_window_position();
  			}
-@@ -2058,6 +2140,54 @@ void TextEdit::_notification(int p_what) {
+@@ -2058,6 +2142,54 @@ void TextEdit::_notification(int p_what) {
  	}
  }
  
@@ -2255,7 +2257,7 @@ index cd092bd..8e91177 100644
  void TextEdit::unhandled_key_input(const Ref<InputEvent> &p_event) {
  	Ref<InputEventKey> k = p_event;
  
-@@ -2257,9 +2387,12 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2257,9 +2389,12 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  	double prev_v_scroll = v_scroll->get_value();
  	double prev_h_scroll = h_scroll->get_value();
  
@@ -2269,7 +2271,7 @@ index cd092bd..8e91177 100644
  		Vector2i mpos = mb->get_position();
  		if (is_layout_rtl()) {
  			mpos.x = get_size().x - mpos.x;
-@@ -2325,7 +2458,7 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2325,7 +2460,7 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  
  				// Minimap.
  				if (draw_minimap) {
@@ -2278,7 +2280,7 @@ index cd092bd..8e91177 100644
  					if (dragging_minimap) {
  						return;
  					}
-@@ -2507,91 +2640,312 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2507,91 +2642,312 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
  					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
  				}
@@ -2648,7 +2650,7 @@ index cd092bd..8e91177 100644
  	if (draw_minimap && !dragging_selection) {
  		_update_minimap_hover();
  	}
-@@ -2884,6 +3238,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2884,6 +3240,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  	}
  }
  
@@ -2721,7 +2723,7 @@ index cd092bd..8e91177 100644
  /* Input actions. */
  void TextEdit::_swap_current_input_direction() {
  	if (input_direction == TEXT_DIRECTION_LTR) {
-@@ -3410,6 +3830,10 @@ void TextEdit::_update_theme_item_cache() {
+@@ -3410,6 +3832,10 @@ void TextEdit::_update_theme_item_cache() {
  	if (text.get_line_height() + theme_cache.line_spacing < 1) {
  		WARN_PRINT("Line height is too small, please increase font_size and/or line_spacing");
  	}
@@ -2732,7 +2734,7 @@ index cd092bd..8e91177 100644
  }
  
  void TextEdit::_update_caches(bool p_invalidate_all) {
-@@ -3491,6 +3915,15 @@ void TextEdit::_update_ime_text() {
+@@ -3491,6 +3917,15 @@ void TextEdit::_update_ime_text() {
  	queue_redraw();
  }
  
@@ -2748,7 +2750,7 @@ index cd092bd..8e91177 100644
  void TextEdit::_show_virtual_keyboard() {
  	_update_ime_window_position();
  
-@@ -6378,6 +6811,14 @@ void TextEdit::delete_selection(int p_caret) {
+@@ -6378,6 +6813,14 @@ void TextEdit::delete_selection(int p_caret) {
  	end_complex_operation();
  }
  
@@ -2763,7 +2765,7 @@ index cd092bd..8e91177 100644
  /* Line wrapping. */
  void TextEdit::set_line_wrapping_mode(LineWrappingMode p_wrapping_mode) {
  	if (line_wrapping_mode != p_wrapping_mode) {
-@@ -7463,6 +7904,9 @@ void TextEdit::_bind_methods() {
+@@ -7463,6 +7906,9 @@ void TextEdit::_bind_methods() {
  	ClassDB::bind_method(D_METHOD("deselect", "caret_index"), &TextEdit::deselect, DEFVAL(-1));
  	ClassDB::bind_method(D_METHOD("delete_selection", "caret_index"), &TextEdit::delete_selection, DEFVAL(-1));
  
@@ -2773,7 +2775,7 @@ index cd092bd..8e91177 100644
  	/* Line wrapping. */
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_NONE);
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_BOUNDARY);
-@@ -7625,6 +8069,7 @@ void TextEdit::_bind_methods() {
+@@ -7625,6 +8071,7 @@ void TextEdit::_bind_methods() {
  	ADD_PROPERTY(PropertyInfo(Variant::INT, "autowrap_mode", PROPERTY_HINT_ENUM, "Arbitrary:1,Word:2,Word (Smart):3"), "set_autowrap_mode", "get_autowrap_mode");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "indent_wrapped_lines"), "set_indent_wrapped_lines", "is_indent_wrapped_lines");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tab_input_mode"), "set_tab_input_mode", "get_tab_input_mode");
@@ -2781,7 +2783,7 @@ index cd092bd..8e91177 100644
  
  	ADD_GROUP("Virtual Keyboard", "virtual_keyboard_");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_keyboard_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_virtual_keyboard_enabled", "is_virtual_keyboard_enabled");
-@@ -8508,9 +8953,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
+@@ -8508,9 +8955,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
  }
  
  void TextEdit::_update_selection_mode_word(bool p_initial) {
@@ -2796,7 +2798,7 @@ index cd092bd..8e91177 100644
  	int line = pos.y;
  	int column = pos.x;
  	int caret_index = get_caret_count() - 1;
-@@ -8992,8 +9441,8 @@ void TextEdit::_update_minimap_hover() {
+@@ -8992,8 +9443,8 @@ void TextEdit::_update_minimap_hover() {
  	}
  }
  
@@ -2807,7 +2809,7 @@ index cd092bd..8e91177 100644
  
  	int xmargin_end = get_size().width - Math::floor(_get_current_stylebox()->get_margin(SIDE_RIGHT));
  	if (!dragging_minimap && (mp.x < xmargin_end - minimap_width || mp.x > xmargin_end)) {
-@@ -9022,7 +9471,7 @@ void TextEdit::_update_minimap_click() {
+@@ -9022,7 +9473,7 @@ void TextEdit::_update_minimap_click() {
  	}
  }
  
@@ -2816,7 +2818,7 @@ index cd092bd..8e91177 100644
  	if (!can_drag_minimap) {
  		return;
  	}
-@@ -9033,7 +9482,7 @@ void TextEdit::_update_minimap_drag() {
+@@ -9033,7 +9484,7 @@ void TextEdit::_update_minimap_drag() {
  		control_height = scroll_height;
  	}
  

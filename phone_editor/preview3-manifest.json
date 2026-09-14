@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "ec742c1cda6af209bc69c8fb231b48f10a3f7002c63fce46d2db9051977d72d5",
+  "patch_sha256": "841bf804371c361d01b87a8dbcb7dbafcf13a77877d64f560b5213e1be29e911",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -132,7 +132,7 @@
     },
     "scene/gui/text_edit.cpp": {
       "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
-      "after": "8371c786d06bbc6d1e831389fb509df46d4abb87d3d7c6191f0f371bb38b87b3"
+      "after": "9558410a2d5f089bfe01cf219f7d0542f22e2771ead56e74d4948c2ad3515066"
     },
     "scene/gui/text_edit.h": {
       "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
