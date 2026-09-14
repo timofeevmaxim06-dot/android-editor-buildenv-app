@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "aeba152a2d30a5006172dc72c8d8fd1d2be7c48f7eaba615242b090821a7b734",
+  "patch_sha256": "034e5cc3163ca00fcfdd6cfb75f16e9d535e5584c67210adf960034c7ed719ee",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -36,7 +36,7 @@
     },
     "editor/gui/code_editor.cpp": {
       "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
-      "after": "e7973dbcf9bea826b5d049a1221579edbea25be2dd020fe414786e4b73ac69a9"
+      "after": "34c915263eee964b75b1ca9f66f8c68dbc8ab70019e19ffb63b6fa1626ef0835"
     },
     "editor/gui/code_editor.h": {
       "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
@@ -84,7 +84,7 @@
     },
     "platform/android/java/editor/build.gradle": {
       "before": "93e2bd247a80dffcf271dbec67646d8e91cd6e50b432b87c15400b7a2904652c",
-      "after": "df1f1f1afd37ac05daae76cf780560097d476faedfa4947d055d53d36b521761"
+      "after": "532ecf0af057ac62d07298d45fd530b207140cbe87f7c28ba212990ccf4559b1"
     },
     "platform/android/java/editor/src/main/AndroidManifest.xml": {
       "before": "513a695f9df2c5ed0be585e381055d181edce52f12ea619eb4b34c4da22d6c4b",

@@ -8,7 +8,7 @@ import subprocess
 HERE = Path(__file__).resolve().parent
 MANIFEST = json.loads((HERE / "preview3-manifest.json").read_text())
 GODOT_COMMIT = MANIFEST["godot_commit"]
-APP_ID = "org.godotengine.editor.v4.phonepreview3"
+APP_ID = "org.godotengine.editor.v4.phonepreview31"
 
 
 def validate(root):
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     (validate if args.check else apply)(args.source.resolve())
-    print(json.dumps({"preview": 3, "status": "VALIDATED" if args.check else "PATCHED",
+    print(json.dumps({"preview": "3.1", "status": "VALIDATED" if args.check else "PATCHED",
                       "godot_commit": GODOT_COMMIT, "app_id": APP_ID,
                       "patch_sha256": MANIFEST["patch_sha256"],
                       "files": sorted(MANIFEST["files"])}, indent=2))

@@ -181,7 +181,7 @@ func _dump_widths(node: Node, threshold: float) -> void:
 	for child in node.get_children(true):
 		_dump_widths(child, threshold)
 
-func _press_text_tool(editor: Control, name: String) -> void:
+func _press_text_tool(editor: Control, name: String, native_tap := false) -> void:
 	var button := editor.find_child(name, true, false) as Button
 	if button == null:
 		_expect(false, "Missing text action " + name)
@@ -195,16 +195,68 @@ func _press_text_tool(editor: Control, name: String) -> void:
 	var record_press := func(): hits[0] += 1
 	button.pressed.connect(record_press)
 	var point := button.get_global_rect().get_center()
-	for pressed in [true, false]:
-		var click := InputEventMouseButton.new()
-		click.button_index = MOUSE_BUTTON_LEFT
-		click.pressed = pressed
-		click.position = point
-		click.global_position = point
-		Input.parse_input_event(click)
-		await _settle(3)
+	if native_tap:
+		await _touch(point, true)
+		await _touch(point, false)
+	else:
+		for pressed in [true, false]:
+			var click := InputEventMouseButton.new()
+			click.button_index = MOUSE_BUTTON_LEFT
+			click.pressed = pressed
+			click.position = point
+			click.global_position = point
+			Input.parse_input_event(click)
+			await _settle(3)
 	button.pressed.disconnect(record_press)
-	_expect(hits[0] == 1, name + " did not receive exactly one real click")
+	_expect(hits[0] == 1, name + " did not receive exactly one real click/tap")
+
+func _font_edit_state(code: CodeEdit) -> Array:
+	return [code.text, code.get_caret_line(), code.get_caret_column(),
+		code.get_selected_text(), code.get_version(), code.has_undo(), code.has_redo(),
+		DisplayServer.clipboard_get(), code.has_focus()]
+
+func _test_font_tools(editor: Control, code: CodeEdit, output: String) -> void:
+	_mark("font_tools")
+	await _press_text_tool(editor, "PhoneFontReset")
+	var original_size := code.get_theme_font_size("font_size")
+	var code_rect := code.get_global_rect()
+	var saved_state := _font_edit_state(code)
+	var old_emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = true
+	for native_tap in [false, true]:
+		await _press_text_tool(editor, "PhoneFontLarger", native_tap)
+		_expect(code.get_theme_font_size("font_size") > original_size, "Font + did not enlarge code")
+		_expect(_font_edit_state(code) == saved_state, "Font + changed editing state")
+		_expect(code.get_global_rect().is_equal_approx(code_rect), "Font + moved or resized the code area")
+		await _press_text_tool(editor, "PhoneFontSmaller", native_tap)
+		_expect(code.get_theme_font_size("font_size") == original_size, "Font - did not restore one step")
+		_expect(_font_edit_state(code) == saved_state, "Font - changed editing state")
+	await _press_text_tool(editor, "PhoneScrollMode")
+	var surface := code.get_node("PhoneCodeScrollSurface") as Control
+	for index in range(4):
+		await _press_text_tool(editor, "PhoneFontLarger", true)
+	_expect(surface.is_visible_in_tree(), "Font controls unexpectedly left reading mode")
+	_expect(_font_edit_state(code) == saved_state, "Font adjustment in reading mode changed editing state")
+	var enlarged := code.get_theme_font_size("font_size")
+	var window_size := get_tree().root.size
+	get_tree().root.size = Vector2i(window_size.y, window_size.x)
+	await _settle()
+	_expect(code.get_theme_font_size("font_size") == enlarged, "Rotation reset the code font")
+	get_tree().root.size = window_size
+	await _settle()
+	_inside_window(code, "enlarged code font")
+	_expect(code.size.y >= window_size.y * 0.5, "Font controls reduced code height")
+	RenderingServer.force_draw(false)
+	_expect(get_viewport().get_texture().get_image().save_png(output.path_join("font-actions-%sx%s.png" % [window_size.x, window_size.y])) == OK, "Could not save enlarged-font screenshot")
+	await _press_text_tool(editor, "PhoneFontReset", true)
+	_expect(code.get_theme_font_size("font_size") == original_size, "Font reset did not return to configured size")
+	_expect(surface.is_visible_in_tree(), "Font reset unexpectedly left reading mode")
+	_expect(_font_edit_state(code) == saved_state, "Font reset changed editing state")
+	await _press_text_tool(editor, "PhoneScrollMode")
+	Input.emulate_mouse_from_touch = old_emulation
+	observations.append({"control": "font_tools", "default_pixels": original_size,
+		"enlarged_pixels": enlarged, "window": str(window_size),
+		"scope": "Mouse and native taps; preserved text, selection, undo/redo, clipboard, focus, reading mode, orientation and code geometry"})
 
 func _test_text_tools(base: Control, output: String) -> void:
 	_mark("text_actions")
@@ -283,6 +335,7 @@ func _test_text_tools(base: Control, output: String) -> void:
 	_expect(DisplayServer.clipboard_get() == "м" and code.get_line(0) == "var ия = 42", "Cut did not remove exactly the selection")
 	await _press_text_tool(editor, "PhoneUndo")
 	_expect(code.get_line(0) == "var имя = 42", "Cut could not be undone")
+	await _test_font_tools(editor, code, output)
 	code.text = "# строка для прокрутки\n".repeat(200)
 	code.deselect()
 	code.set_caret_line(0)

@@ -531,7 +531,7 @@ index f683e13..be4e03d 100644
  	ConfirmationDialog *video_restart_dialog = nullptr;
  
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..69f225f 100644
+index aceecca..ea60b55 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -675,7 +675,7 @@ index aceecca..69f225f 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,10 +2065,65 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2065,79 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
@@ -716,6 +716,20 @@ index aceecca..69f225f 100644
 +		_phone_add_action(row, "PhoneSelectAll", String::utf8("Всё"), 6);
 +		_phone_add_action(row, "PhoneGoToLine", String::utf8("К строке"), 8);
 +		_phone_add_action(row, "PhoneScripts", String::utf8("Скрипты"), 16);
++		// Font controls must not apply pending IME text or leave reading mode.
++		// Append them to preserve the accepted order of existing phone actions.
++		Button *font_smaller = _phone_add_action(row, "PhoneFontSmaller", String::utf8("А−"), -1);
++		font_smaller->set_tooltip_text(String::utf8("Уменьшить шрифт кода. Размер панелей не меняется."));
++		font_smaller->set_accessibility_name(TTRC("Zoom Out"));
++		font_smaller->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_out));
++		Button *font_larger = _phone_add_action(row, "PhoneFontLarger", String::utf8("А+"), -1);
++		font_larger->set_tooltip_text(String::utf8("Увеличить шрифт кода. Размер панелей не меняется."));
++		font_larger->set_accessibility_name(TTRC("Zoom In"));
++		font_larger->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_in));
++		Button *font_reset = _phone_add_action(row, "PhoneFontReset", "100%", -1);
++		font_reset->set_tooltip_text(String::utf8("Вернуть размер шрифта кода из настроек редактора."));
++		font_reset->set_accessibility_name(TTRC("Reset Zoom"));
++		font_reset->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_to).bind(1.0f));
 +		phone_scroll_surface = memnew(Control);
 +		phone_scroll_surface->set_name("PhoneCodeScrollSurface");
 +		text_editor->add_child(phone_scroll_surface);
@@ -1193,7 +1207,7 @@ index 1fd7478..095efdc 100644
  	void process_pan(Point2 p_pos, Vector2 p_delta);
  	void process_joy_event(JoypadEvent p_event);
 diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
-index fcbb102..f4429a8 100644
+index fcbb102..21ae4e9 100644
 --- a/platform/android/java/editor/build.gradle
 +++ b/platform/android/java/editor/build.gradle
 @@ -78,7 +78,7 @@ android {
@@ -1201,7 +1215,7 @@ index fcbb102..f4429a8 100644
      defaultConfig {
          // The 'applicationId' suffix allows to install Godot 3.x(v3) and 4.x(v4) on the same device
 -        applicationId "org.godotengine.editor.v4"
-+        applicationId "org.godotengine.editor.v4.phonepreview3"
++        applicationId "org.godotengine.editor.v4.phonepreview31"
          versionCode generateVersionCode()
          versionName generateVersionName()
          minSdkVersion versions.minSdk
@@ -1210,7 +1224,7 @@ index fcbb102..f4429a8 100644
          missingDimensionStrategy 'products', 'editor'
          manifestPlaceholders += [
 -            editorAppName: "Godot Engine 4",
-+            editorAppName: "Godot Phone Preview 3",
++            editorAppName: "Godot Phone Preview 3.1",
              editorBuildSuffix: ""
          ]
  

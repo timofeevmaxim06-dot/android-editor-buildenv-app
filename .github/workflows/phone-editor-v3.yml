@@ -1,8 +1,8 @@
-name: Godot Phone Preview 3
+name: Godot Phone Preview 3.1
 
 on:
   push:
-    branches: [phone-editor-preview3-20260913]
+    branches: [phone-editor-preview3-polish-20260914]
     paths:
       - 'phone_editor/**'
       - '.github/workflows/phone-editor-v3.yml'
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phone-editor-preview-3
+  group: phone-editor-preview-31
   cancel-in-progress: true
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
       - name: Upload test binary for diagnosis
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3-linux-test-binary
+          name: godot-phone-preview-3.1-linux-test-binary
           path: godot/bin/godot.linuxbsd.editor.x86_64
           retention-days: 7
           if-no-files-found: error
@@ -118,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3-layout
+          name: godot-phone-preview-3.1-layout
           path: layout-evidence/
           if-no-files-found: warn
           retention-days: 30
@@ -148,7 +148,7 @@ jobs:
           python recipe/phone_editor/test_mobile_patch_v3.py godot 2>&1 | tee evidence/source-tests.txt
           python recipe/phone_editor/apply_mobile_patch_v3.py godot | tee evidence/patch-manifest.json
           git -C godot diff --check
-          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.patch
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.1.patch
           cp recipe/phone_editor/README-v3.md evidence/README.md
           git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
           git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
@@ -191,7 +191,10 @@ jobs:
         run: scons platform=android target=editor arch=arm64 production=yes -j2
       - name: Package test-signed editor
         working-directory: godot/platform/android/java
-        run: ./gradlew generateGodotEditor --no-daemon
+        run: |
+          mkdir -p "$HOME/.android"
+          cp editor/src/main/assets/keystores/debug.keystore "$HOME/.android/debug.keystore"
+          ./gradlew generateGodotEditor --no-daemon
       - name: Verify APK identity, signature and alignment
         shell: bash
         run: |
@@ -204,10 +207,11 @@ jobs:
             phone_name=$(basename "$phone_apk")
             phone_id=$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest application-id "$phone_apk")
             case "$phone_id" in
-              org.godotengine.editor.v4.phonepreview3.debug|org.godotengine.editor.v4.phonepreview3.release) ;;
+              org.godotengine.editor.v4.phonepreview31.debug|org.godotengine.editor.v4.phonepreview31.release) ;;
               *) echo 'Unexpected application ID; refusing artifact'; exit 1 ;;
             esac
             "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose --print-certs "$phone_apk" > "evidence/$phone_name-signature.txt"
+            grep -q 'certificate SHA-256 digest: 921564d50b125fc1dfbe2209be475ed2172adf8be7f472532f212819715d3e8c' "evidence/$phone_name-signature.txt"
             "$ANDROID_HOME/build-tools/36.1.0/zipalign" -c -P 16 4 "$phone_apk" > "evidence/$phone_name-alignment.txt"
             python recipe/phone_editor/verify_apk.py "$phone_apk" > "evidence/$phone_name-contents.json"
             printf '%s %s\n' "$phone_id" "$phone_name" >> evidence/APPLICATION-IDS.txt
@@ -219,7 +223,7 @@ jobs:
       - name: Upload APK only after verification
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3-apk
+          name: godot-phone-preview-3.1-apk
           path: deliverables/
           if-no-files-found: error
           retention-days: 30
@@ -227,7 +231,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3-evidence
+          name: godot-phone-preview-3.1-evidence
           path: evidence/
           if-no-files-found: warn
           retention-days: 30
