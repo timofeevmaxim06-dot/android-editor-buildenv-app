@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "bff31827b071a3edc0ace687c88e84d4e12f97cf8b1e969bff7b41427e80ac1c",
+  "patch_sha256": "0df84d39f2e4ccc975f80e747797d84c44c8f20947d4a6f288471594a7d3240e",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -36,7 +36,7 @@
     },
     "editor/gui/code_editor.cpp": {
       "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
-      "after": "622ebd233c8cdffe90dfc6ad5ef4a05fad06d3a1723508bff99f50093eee66d0"
+      "after": "773deac688f235dcc6292b2a4b4639a66346604ea3ab5090f2c30c4be2b6b52e"
     },
     "editor/gui/code_editor.h": {
       "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
@@ -64,11 +64,11 @@
     },
     "editor/script/script_editor_plugin.cpp": {
       "before": "18e0bac3f5fa7c2fe8117907af86282b92855d283ae6ab79b6a0587a87560947",
-      "after": "49197601989308b422892013889198014b88b9b63bcb0de5e89093680360c7bb"
+      "after": "6a3fd875df552eb6b048bef3bfbb10236699310c2ee7d33a5fcef913f078b3d1"
     },
     "editor/script/script_editor_plugin.h": {
       "before": "3d21d4d18c7378937d0e87b24bd14f5b919ab8a6fd66d3776874c0558c1cf1bb",
-      "after": "56eb35e412680f0369d6f602d3edb0067a194e0d5dbf5fd3c31323ea9d46d10c"
+      "after": "e00b257a69fb3edf173c3d462adb8f818a56d76267dcf41420c978c6b2ec26ff"
     },
     "editor/settings/editor_settings.cpp": {
       "before": "a9b1c5ff8ff60353f8e3803218fe064f097c573d36e82113b94e347fe8f44906",
@@ -132,11 +132,11 @@
     },
     "scene/gui/text_edit.cpp": {
       "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
-      "after": "9558410a2d5f089bfe01cf219f7d0542f22e2771ead56e74d4948c2ad3515066"
+      "after": "77efd4c2a2ecfebe5e8ba0a500e8d7e5ee1ac86ab8ee5fc50bd84285bcae1c0a"
     },
     "scene/gui/text_edit.h": {
       "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
-      "after": "2ebfb3d7fbb96c2c4aceb36a6d6d73d9d3109100b1ac758ae2247597c7c45dea"
+      "after": "4da17912d9eb11e8b3cf5a2d68bf09a6e37fc318fcb43f5e047909b770b61afa"
     }
   },
   "preview": "3.2",

@@ -646,7 +646,7 @@ index f683e13..be4e03d 100644
  	ConfirmationDialog *video_restart_dialog = nullptr;
  
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..23ef535 100644
+index aceecca..e997ed0 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -700,7 +700,7 @@ index aceecca..23ef535 100644
  		return;
  	}
  
-@@ -1946,6 +1953,130 @@ void CodeTextEditor::update_toggle_files_button() {
+@@ -1946,6 +1953,136 @@ void CodeTextEditor::update_toggle_files_button() {
  	toggle_files_button->set_tooltip_text(vformat("%s (%s)", TTR("Toggle Files Panel"), ED_GET_SHORTCUT("script_editor/toggle_files_panel")->get_as_text()));
  }
  
@@ -738,6 +738,8 @@ index aceecca..23ef535 100644
 +}
 +
 +void CodeTextEditor::_phone_scroll_toggled(bool p_enabled) {
++	// The reading surface intercepts touch, so it must stop the CodeEdit's old flick.
++	text_editor->cancel_touch_scroll();
 +	phone_pan_lock.reset();
 +	phone_scroll_surface->set_visible(p_enabled);
 +	phone_scroll_button->set_text(p_enabled ? String::utf8("Править") : String::utf8("Листать"));
@@ -772,8 +774,12 @@ index aceecca..23ef535 100644
 +		}
 +	}
 +	const real_t sensitivity = (int)EDITOR_GET("interface/touchscreen/phone_text_pan_percent") / 100.0;
-+	text_editor->set_v_scroll(text_editor->get_v_scroll() + pixels.y * sensitivity / MAX(1, text_editor->get_line_height()));
-+	text_editor->set_h_scroll(text_editor->get_h_scroll() + pixels.x * sensitivity);
++	if (!Math::is_zero_approx(pixels.y)) {
++		text_editor->set_v_scroll(text_editor->get_v_scroll() + pixels.y * sensitivity / MAX(1, text_editor->get_line_height()));
++	}
++	if (!Math::is_zero_approx(pixels.x)) {
++		text_editor->set_h_scroll(text_editor->get_h_scroll() + pixels.x * sensitivity);
++	}
 +	phone_scroll_surface->accept_event();
 +}
 +
@@ -831,7 +837,7 @@ index aceecca..23ef535 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,10 +2094,101 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2100,101 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
@@ -1181,7 +1187,7 @@ index 1982fda..631050d 100644
  	void _update_scroll(real_t);
  	void _update_scrollbars();
 diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
-index 0e60dde..c73c219 100644
+index 0e60dde..7ea004e 100644
 --- a/editor/script/script_editor_plugin.cpp
 +++ b/editor/script/script_editor_plugin.cpp
 @@ -75,6 +75,7 @@
@@ -1192,7 +1198,7 @@ index 0e60dde..c73c219 100644
  #include "scene/gui/tab_container.h"
  #include "scene/gui/texture_rect.h"
  #include "scene/main/node.h"
-@@ -996,9 +997,58 @@ TypedArray<Script> ScriptEditor::_get_open_scripts() const {
+@@ -996,9 +997,78 @@ TypedArray<Script> ScriptEditor::_get_open_scripts() const {
  	return ret;
  }
  
@@ -1245,6 +1251,26 @@ index 0e60dde..c73c219 100644
 +	}
 +}
 +
++void ScriptEditor::_update_phone_script_list_layout() {
++	if (!is_inside_tree() || !tab_container || !(bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		return;
++	}
++	const Size2 window_size = get_viewport()->get_visible_rect().size;
++	const real_t available_width = MIN(get_size().x, window_size.x) - 16 * EDSCALE;
++	Control *code_container = Object::cast_to<Control>(tab_container->get_parent());
++	const real_t side_by_side_width = list_split->get_combined_minimum_size().x + code_container->get_combined_minimum_size().x + 16 * EDSCALE;
++	const bool stacked = available_width < side_by_side_width;
++	if (script_split->is_vertical() != stacked) {
++		script_split->set_vertical(stacked);
++		script_split->set_split_offset(0);
++	}
++	// In portrait the list sits above the code; a wide screen retains the side list.
++	list_split->set_v_size_flags(stacked ? SIZE_FILL : SIZE_EXPAND_FILL);
++	list_split->set_custom_minimum_size(Size2(0, stacked ? MIN(180 * EDSCALE, window_size.y * 0.25f) : 0));
++	code_container->set_v_size_flags(SIZE_EXPAND_FILL);
++	code_container->set_h_size_flags(SIZE_EXPAND_FILL);
++}
++
  bool ScriptEditor::toggle_files_panel() {
  	list_split->set_visible(!list_split->is_visible());
 -	EditorSettings::get_singleton()->set_project_metadata("files_panel", "show_files_panel", list_split->is_visible());
@@ -1252,7 +1278,7 @@ index 0e60dde..c73c219 100644
  	return list_split->is_visible();
  }
  
-@@ -1424,6 +1474,7 @@ void ScriptEditor::_file_menu_closed() {
+@@ -1424,6 +1494,7 @@ void ScriptEditor::_file_menu_closed() {
  }
  
  void ScriptEditor::_tab_changed(int p_which) {
@@ -1260,7 +1286,21 @@ index 0e60dde..c73c219 100644
  	ensure_select_current();
  }
  
-@@ -1515,11 +1566,15 @@ void ScriptEditor::_notification(int p_what) {
+@@ -1508,6 +1579,13 @@ void ScriptEditor::_notification(int p_what) {
+ 			help_overview->connect(SceneStringName(item_selected), callable_mp(this, &ScriptEditor::_help_overview_selected));
+ 			script_split->connect("dragged", callable_mp(this, &ScriptEditor::_split_dragged));
+ 			list_split->connect("dragged", callable_mp(this, &ScriptEditor::_split_dragged));
++			if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++				get_viewport()->connect(SNAME("size_changed"), callable_mp(this, &ScriptEditor::_update_phone_script_list_layout), CONNECT_DEFERRED);
++				script_split->connect(SceneStringName(resized), callable_mp(this, &ScriptEditor::_update_phone_script_list_layout), CONNECT_DEFERRED);
++				list_split->connect(SceneStringName(visibility_changed), callable_mp(this, &ScriptEditor::_update_phone_script_list_layout), CONNECT_DEFERRED);
++				tab_container->get_parent()->connect(SceneStringName(minimum_size_changed), callable_mp(this, &ScriptEditor::_update_phone_script_list_layout), CONNECT_DEFERRED);
++				callable_mp(this, &ScriptEditor::_update_phone_script_list_layout).call_deferred();
++			}
+ 
+ 			EditorFileSystem::get_singleton()->connect("filesystem_changed", callable_mp(this, &ScriptEditor::_filesystem_changed));
+ #ifdef ANDROID_ENABLED
+@@ -1515,11 +1593,15 @@ void ScriptEditor::_notification(int p_what) {
  #endif
  		} break;
  
@@ -1277,7 +1317,7 @@ index 0e60dde..c73c219 100644
  		case NOTIFICATION_PROCESS: {
  			const int kb_height = DisplayServer::get_singleton()->virtual_keyboard_get_height();
  			if (kb_height == last_kb_height) {
-@@ -1553,8 +1608,14 @@ void ScriptEditor::_notification(int p_what) {
+@@ -1553,8 +1635,14 @@ void ScriptEditor::_notification(int p_what) {
  			}
  
  			virtual_keyboard_spacer->set_custom_minimum_size(Size2(0, spacer_height));
@@ -1294,7 +1334,7 @@ index 0e60dde..c73c219 100644
  		} break;
  #endif
  		case NOTIFICATION_APPLICATION_FOCUS_IN: {
-@@ -3824,8 +3885,20 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3824,10 +3912,27 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	VBoxContainer *main_container = memnew(VBoxContainer);
  	add_child(main_container);
  
@@ -1312,11 +1352,19 @@ index 0e60dde..c73c219 100644
 +	} else {
 +		main_container->add_child(menu_hb);
 +	}
-+
  
- 	script_split = memnew(HSplitContainer);
+-	script_split = memnew(HSplitContainer);
++
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		script_split = memnew(SplitContainer);
++		script_split->set_name("PhoneScriptSplit");
++	} else {
++		script_split = memnew(HSplitContainer);
++	}
  	main_container->add_child(script_split);
-@@ -3857,7 +3930,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	script_split->set_v_size_flags(SIZE_EXPAND_FILL);
+ 	script_split->set_drag_nested_intersections(true);
+@@ -3857,7 +3962,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	_sort_list_on_update = true;
  	script_list = memnew(ItemList);
  	script_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
@@ -1325,7 +1373,7 @@ index 0e60dde..c73c219 100644
  	script_list->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_list->set_theme_type_variation("ItemListSecondary");
  	script_split->set_split_offset(200 * EDSCALE);
-@@ -3875,7 +3948,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3875,7 +3980,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->set_v_size_flags(SIZE_EXPAND_FILL);
  
  	list_split->add_child(overview_vbox);
@@ -1338,7 +1386,7 @@ index 0e60dde..c73c219 100644
  	buttons_hbox = memnew(HBoxContainer);
  	overview_vbox->add_child(buttons_hbox);
  
-@@ -3901,7 +3978,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3901,7 +4010,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->add_child(members_overview);
  
  	members_overview->set_allow_reselect(true);
@@ -1347,7 +1395,7 @@ index 0e60dde..c73c219 100644
  	members_overview->set_v_size_flags(SIZE_EXPAND_FILL);
  	members_overview->set_allow_rmb_select(true);
  
-@@ -3910,7 +3987,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3910,7 +4019,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	help_overview->set_theme_type_variation("ItemListSecondary");
  	overview_vbox->add_child(help_overview);
  	help_overview->set_allow_reselect(true);
@@ -1357,10 +1405,27 @@ index 0e60dde..c73c219 100644
  
  	VBoxContainer *code_editor_container = memnew(VBoxContainer);
 diff --git a/editor/script/script_editor_plugin.h b/editor/script/script_editor_plugin.h
-index 067c3fb..4c50b3c 100644
+index 067c3fb..7a750e1 100644
 --- a/editor/script/script_editor_plugin.h
 +++ b/editor/script/script_editor_plugin.h
-@@ -239,7 +239,12 @@ class ScriptEditor : public PanelContainer {
+@@ -44,6 +44,7 @@ class EditorHelpSearch;
+ class FilterLineEdit;
+ class FindReplaceBar;
+ class HSplitContainer;
++class SplitContainer;
+ class ItemList;
+ class MenuButton;
+ class TabContainer;
+@@ -166,7 +167,7 @@ class ScriptEditor : public PanelContainer {
+ 	EditorHelpSearch *help_search_dialog = nullptr;
+ 
+ 	ItemList *script_list = nullptr;
+-	HSplitContainer *script_split = nullptr;
++	SplitContainer *script_split = nullptr;
+ 	ItemList *members_overview = nullptr;
+ 	LineEdit *filter_scripts = nullptr;
+ 	LineEdit *filter_methods = nullptr;
+@@ -239,7 +240,13 @@ class ScriptEditor : public PanelContainer {
  	Tree *disk_changed_list = nullptr;
  	ConfirmationDialog *disk_changed = nullptr;
  
@@ -1370,10 +1435,11 @@ index 067c3fb..4c50b3c 100644
 +	Control *phone_menu_scroll = nullptr;
 +	HashMap<ObjectID, bool> phone_hidden_chrome;
 +	void update_phone_chrome();
++	void _update_phone_script_list_layout();
  
  	void _resave_scripts(const String &p_str);
  
-@@ -401,6 +406,7 @@ protected:
+@@ -401,6 +408,7 @@ protected:
  public:
  	static ScriptEditor *get_singleton() { return script_editor; }
  
@@ -2101,7 +2167,7 @@ index 3a607c1..f0fd2c0 100644
  	bool is_code_completion_scroll_hovered = false;
  	bool is_code_completion_scroll_pressed = false;
 diff --git a/scene/gui/text_edit.cpp b/scene/gui/text_edit.cpp
-index cd092bd..b856282 100644
+index cd092bd..2611625 100644
 --- a/scene/gui/text_edit.cpp
 +++ b/scene/gui/text_edit.cpp
 @@ -891,7 +891,72 @@ void TextEdit::_notification(int p_what) {
@@ -2282,7 +2348,7 @@ index cd092bd..b856282 100644
  					if (dragging_minimap) {
  						return;
  					}
-@@ -2507,91 +2642,312 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+@@ -2507,89 +2642,310 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  				if (DisplayServer::get_singleton()->has_feature(DisplayServerEnums::FEATURE_CLIPBOARD_PRIMARY)) {
  					DisplayServer::get_singleton()->clipboard_set_primary(get_selected_text());
  				}
@@ -2557,9 +2623,9 @@ index cd092bd..b856282 100644
 -			dragging_selection = true;
 +			touch_dragging_starting = false;
 +			touch_dragging_in_progress = false;
- 		}
- 	}
- 
++		}
++	}
++
 +	Ref<InputEventScreenDrag> drag = p_gui_input;
 +	if (drag.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		show_selection_handle = true; // Showing selection handle because native touch input is used.
@@ -2633,7 +2699,7 @@ index cd092bd..b856282 100644
 +			_scroll_up(-delta, false);
 +		} else {
 +			_scroll_down(delta, false);
-+		}
+ 		}
 +		h_scroll->set_value(h_scroll->get_value() + pan_delta.x * horizontal_multiplier);
 +		if (v_scroll->get_value() != prev_v_scroll || h_scroll->get_value() != prev_h_scroll) {
 +			accept_event(); // Accept event if scroll changed.
@@ -2647,12 +2713,10 @@ index cd092bd..b856282 100644
 +
 +	if (mm.is_valid() && event_device_id != InputEvent::DEVICE_ID_EMULATION) {
 +		_on_drag_or_mouse_motion_event(mm->get_position(), mm->get_button_mask().has_flag(MouseButtonMask::LEFT));
-+	}
-+
- 	if (draw_minimap && !dragging_selection) {
- 		_update_minimap_hover();
  	}
-@@ -2884,6 +3240,72 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
+ 
+ 	if (draw_minimap && !dragging_selection) {
+@@ -2884,6 +3240,79 @@ void TextEdit::gui_input(const Ref<InputEvent> &p_gui_input) {
  	}
  }
  
@@ -2722,10 +2786,17 @@ index cd092bd..b856282 100644
 +	drag_from = Vector2();
 +}
 +
++void TextEdit::cancel_touch_scroll() {
++	_cancel_inertial_scroll();
++	touch_dragging_starting = false;
++	touch_dragging_in_progress = false;
++	phone_pan_lock.reset();
++}
++
  /* Input actions. */
  void TextEdit::_swap_current_input_direction() {
  	if (input_direction == TEXT_DIRECTION_LTR) {
-@@ -3410,6 +3832,10 @@ void TextEdit::_update_theme_item_cache() {
+@@ -3410,6 +3839,10 @@ void TextEdit::_update_theme_item_cache() {
  	if (text.get_line_height() + theme_cache.line_spacing < 1) {
  		WARN_PRINT("Line height is too small, please increase font_size and/or line_spacing");
  	}
@@ -2736,7 +2807,7 @@ index cd092bd..b856282 100644
  }
  
  void TextEdit::_update_caches(bool p_invalidate_all) {
-@@ -3491,6 +3917,15 @@ void TextEdit::_update_ime_text() {
+@@ -3491,6 +3924,15 @@ void TextEdit::_update_ime_text() {
  	queue_redraw();
  }
  
@@ -2752,7 +2823,7 @@ index cd092bd..b856282 100644
  void TextEdit::_show_virtual_keyboard() {
  	_update_ime_window_position();
  
-@@ -6378,6 +6813,14 @@ void TextEdit::delete_selection(int p_caret) {
+@@ -6378,6 +6820,14 @@ void TextEdit::delete_selection(int p_caret) {
  	end_complex_operation();
  }
  
@@ -2767,7 +2838,7 @@ index cd092bd..b856282 100644
  /* Line wrapping. */
  void TextEdit::set_line_wrapping_mode(LineWrappingMode p_wrapping_mode) {
  	if (line_wrapping_mode != p_wrapping_mode) {
-@@ -7463,6 +7906,9 @@ void TextEdit::_bind_methods() {
+@@ -7463,6 +7913,9 @@ void TextEdit::_bind_methods() {
  	ClassDB::bind_method(D_METHOD("deselect", "caret_index"), &TextEdit::deselect, DEFVAL(-1));
  	ClassDB::bind_method(D_METHOD("delete_selection", "caret_index"), &TextEdit::delete_selection, DEFVAL(-1));
  
@@ -2777,7 +2848,7 @@ index cd092bd..b856282 100644
  	/* Line wrapping. */
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_NONE);
  	BIND_ENUM_CONSTANT(LINE_WRAPPING_BOUNDARY);
-@@ -7625,6 +8071,7 @@ void TextEdit::_bind_methods() {
+@@ -7625,6 +8078,7 @@ void TextEdit::_bind_methods() {
  	ADD_PROPERTY(PropertyInfo(Variant::INT, "autowrap_mode", PROPERTY_HINT_ENUM, "Arbitrary:1,Word:2,Word (Smart):3"), "set_autowrap_mode", "get_autowrap_mode");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "indent_wrapped_lines"), "set_indent_wrapped_lines", "is_indent_wrapped_lines");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tab_input_mode"), "set_tab_input_mode", "get_tab_input_mode");
@@ -2785,7 +2856,7 @@ index cd092bd..b856282 100644
  
  	ADD_GROUP("Virtual Keyboard", "virtual_keyboard_");
  	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_keyboard_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_virtual_keyboard_enabled", "is_virtual_keyboard_enabled");
-@@ -8508,9 +8955,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
+@@ -8508,9 +8962,13 @@ void TextEdit::_update_selection_mode_pointer(bool p_initial) {
  }
  
  void TextEdit::_update_selection_mode_word(bool p_initial) {
@@ -2800,7 +2871,7 @@ index cd092bd..b856282 100644
  	int line = pos.y;
  	int column = pos.x;
  	int caret_index = get_caret_count() - 1;
-@@ -8992,8 +9443,8 @@ void TextEdit::_update_minimap_hover() {
+@@ -8992,8 +9450,8 @@ void TextEdit::_update_minimap_hover() {
  	}
  }
  
@@ -2811,7 +2882,7 @@ index cd092bd..b856282 100644
  
  	int xmargin_end = get_size().width - Math::floor(_get_current_stylebox()->get_margin(SIDE_RIGHT));
  	if (!dragging_minimap && (mp.x < xmargin_end - minimap_width || mp.x > xmargin_end)) {
-@@ -9022,7 +9473,7 @@ void TextEdit::_update_minimap_click() {
+@@ -9022,7 +9480,7 @@ void TextEdit::_update_minimap_click() {
  	}
  }
  
@@ -2820,7 +2891,7 @@ index cd092bd..b856282 100644
  	if (!can_drag_minimap) {
  		return;
  	}
-@@ -9033,7 +9484,7 @@ void TextEdit::_update_minimap_drag() {
+@@ -9033,7 +9491,7 @@ void TextEdit::_update_minimap_drag() {
  		control_height = scroll_height;
  	}
  
@@ -2830,7 +2901,7 @@ index cd092bd..b856282 100644
  	double diff = (mp.y - minimap_scroll_click_pos) / control_height;
  	v_scroll->set_as_ratio(minimap_scroll_ratio + diff);
 diff --git a/scene/gui/text_edit.h b/scene/gui/text_edit.h
-index 8470ccc..0a7f0b0 100644
+index 8470ccc..b748cc8 100644
 --- a/scene/gui/text_edit.h
 +++ b/scene/gui/text_edit.h
 @@ -37,6 +37,26 @@
@@ -2933,3 +3004,11 @@ index 8470ccc..0a7f0b0 100644
  	/* Line wrapping. */
  	void set_line_wrapping_mode(LineWrappingMode p_wrapping_mode);
  	LineWrappingMode get_line_wrapping_mode() const;
+@@ -1064,6 +1120,7 @@ public:
+ 	VScrollBar *get_v_scroll_bar() const;
+ 	HScrollBar *get_h_scroll_bar() const;
+ 
++	void cancel_touch_scroll();
+ 	void set_v_scroll(double p_scroll);
+ 	double get_v_scroll() const;
+ 

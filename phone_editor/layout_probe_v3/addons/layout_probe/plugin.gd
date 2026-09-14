@@ -239,6 +239,9 @@ func _test_direction_lock(editor: Control, code: CodeEdit) -> void:
 	for reading in [false, true]:
 		if reading:
 			await _press_text_tool(editor, "PhoneScrollMode")
+			var after_switch := Vector2(code.get_h_scroll(), code.get_v_scroll())
+			await _settle(10)
+			_expect(Vector2(code.get_h_scroll(), code.get_v_scroll()).is_equal_approx(after_switch), "Entering reading mode did not stop the preceding flick")
 		for movement in [Vector2(3, -20), Vector2(-20, 3)]:
 			# Stop previous inertia, then establish a known scroll position.
 			var point := code.global_position + code.size * Vector2(0.4, 0.6)
@@ -263,6 +266,7 @@ func _test_direction_lock(editor: Control, code: CodeEdit) -> void:
 				await _settle(3)
 			await _touch(point + movement * 5, false)
 			await _settle(10)
+			print("PHONE_SCROLL_RESULT reading=", reading, " delta=", movement, " before=", Vector2(h, v), " after=", Vector2(code.get_h_scroll(), code.get_v_scroll()))
 			if movement.y < 0:
 				_expect(is_equal_approx(code.get_h_scroll(), h), "Vertical finger drag drifted horizontally, reading=" + str(reading))
 				_expect(code.get_v_scroll() > v, "Vertical finger drag failed to scroll")
@@ -308,10 +312,18 @@ func _menu_choose(button: MenuButton, index: int) -> void:
 		popup.hide()
 		return
 	popup.set_focused_item(index)
-	var event := InputEventKey.new()
-	event.keycode = KEY_ENTER
-	event.pressed = true
-	popup.push_input(event)
+	var selected: Array[int] = []
+	var record := func(id: int): selected.append(id)
+	popup.id_pressed.connect(record)
+	# Go through the window event dispatcher; PopupMenu handles input before push_input.
+	for pressed in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = KEY_ENTER
+		event.pressed = pressed
+		Input.parse_input_event(event)
+		await _settle(2)
+	popup.id_pressed.disconnect(record)
+	_expect(selected == [popup.get_item_id(index)], "Menu did not activate exactly the requested item")
 	await _settle(6)
 	_expect(not popup.visible, "Selected menu stayed open")
 
@@ -478,6 +490,16 @@ func _test_text_tools(base: Control, output: String) -> void:
 	_expect(scripts.is_visible_in_tree(), "Scripts command did not open the native list")
 	_inside_window(scripts, "script list")
 	_inside_window(code, "code with script list")
+	_inside_window(primary, "primary code commands with script list")
+	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Script list took more than half the window from code")
+	var original_window := get_tree().root.size
+	get_tree().root.size = Vector2i(original_window.y, original_window.x)
+	await _settle()
+	_inside_window(scripts, "script list after rotation")
+	_inside_window(code, "code with script list after rotation")
+	_inside_window(primary, "primary commands with script list after rotation")
+	get_tree().root.size = original_window
+	await _settle()
 	await _press_text_tool(editor, "PhoneScripts")
 	_expect(not scripts.is_visible_in_tree(), "Scripts command did not close the native list")
 	var original := code.text
