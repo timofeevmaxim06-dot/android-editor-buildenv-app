@@ -201,6 +201,8 @@ jobs:
           jdkFile: ${{ runner.temp }}/phone-jdk.tar.gz
       - name: Set up Android SDK
         uses: android-actions/setup-android@4d90f943634881869c98b16d759177c8ee849798
+        with:
+          packages: 'platform-tools'
       - name: Install fixed build prerequisites
         shell: bash
         run: |
