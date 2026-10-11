@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "0df84d39f2e4ccc975f80e747797d84c44c8f20947d4a6f288471594a7d3240e",
+  "patch_sha256": "1488b93d0eb52aa233a58d378605ec2a094123caf895c30cb2bc3db91c2d2565",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -36,7 +36,7 @@
     },
     "editor/gui/code_editor.cpp": {
       "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
-      "after": "773deac688f235dcc6292b2a4b4639a66346604ea3ab5090f2c30c4be2b6b52e"
+      "after": "a95e6667c07eeff0531ad3528381b3bf6d47a6c1bddc71fe0de8cc43c3fb9c77"
     },
     "editor/gui/code_editor.h": {
       "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
@@ -56,19 +56,19 @@
     },
     "editor/scene/canvas_item_editor_plugin.cpp": {
       "before": "6f17b25d5469d44de43fb0da2bc705a372d99e60abb0125c8a1e46e463566780",
-      "after": "eb8334213533590a1ae109df9a702b936f15734618526b773c762c2a76e77e5d"
+      "after": "5825e802a6fd3fd570dab0ac1ceab47eb632e0163ac5ea4c505eab82392cd9be"
     },
     "editor/scene/canvas_item_editor_plugin.h": {
       "before": "edf3cc4ccb522b050fba0d1005f487db03fdad451d53741c46a0f44bee2d3927",
-      "after": "e9719af3d0deb3a6a102ca1c2735a2f12b6472032e2e3eba912df327082a4f8c"
+      "after": "d2206d70278c3b33b89b712b9798ce0e8b4c8a39753b0e920b37031f401caeda"
     },
     "editor/script/script_editor_plugin.cpp": {
       "before": "18e0bac3f5fa7c2fe8117907af86282b92855d283ae6ab79b6a0587a87560947",
-      "after": "6a3fd875df552eb6b048bef3bfbb10236699310c2ee7d33a5fcef913f078b3d1"
+      "after": "ca7112dfd5d3622b0fef50f10417ac3cb4435da9ba1f3fc7d08a10adc5432389"
     },
     "editor/script/script_editor_plugin.h": {
       "before": "3d21d4d18c7378937d0e87b24bd14f5b919ab8a6fd66d3776874c0558c1cf1bb",
-      "after": "e00b257a69fb3edf173c3d462adb8f818a56d76267dcf41420c978c6b2ec26ff"
+      "after": "9166ff731dbccf4f937e252559e61b342e36dd4b756471a38b34f277d24e5993"
     },
     "editor/settings/editor_settings.cpp": {
       "before": "a9b1c5ff8ff60353f8e3803218fe064f097c573d36e82113b94e347fe8f44906",
@@ -76,7 +76,11 @@
     },
     "editor/themes/editor_theme_manager.cpp": {
       "before": "08e5288271c48058340b7c1b6acda2e016601dcbfd9248b064bf3a62144f11c9",
-      "after": "ed8bee17fd60de1f97eff794f9bc5476a636e17ba9a4a43a4a54ba79146c784a"
+      "after": "a00bcb2bec20fc4329afcb5b5ed5c2ffb800af2133e41ef2457ff24e94e18e94"
+    },
+    "modules/text_server_adv/text_server_adv.h": {
+      "before": "9aee34f0b70e99519ab570bef08bc4cd00523954231b08d99feb4adc662a04b9",
+      "after": "346fd9293f92a33556ecf1c8faa899bd4502c573b20d9a4a6a582274ede9aee5"
     },
     "platform/android/android_input_handler.cpp": {
       "before": "b5a8cb9ab4b6a0fbf5fbd822c4aebcb72407739de626c6d815bf1d796e81512a",
@@ -88,7 +92,7 @@
     },
     "platform/android/java/editor/build.gradle": {
       "before": "93e2bd247a80dffcf271dbec67646d8e91cd6e50b432b87c15400b7a2904652c",
-      "after": "9e936c522ee09437d145ef5fed81e61bfcceb052ad2f7ba397396e244cf1d877"
+      "after": "a103f441c03c659df919e82533ebc23f3e5f7bf8478ecfdc2c59c0c89960afdf"
     },
     "platform/android/java/editor/src/main/AndroidManifest.xml": {
       "before": "513a695f9df2c5ed0be585e381055d181edce52f12ea619eb4b34c4da22d6c4b",
@@ -109,6 +113,10 @@
     "platform/android/java/editor/src/main/res/layout/game_menu_fragment_layout.xml": {
       "before": "0807ffa24e2fa0b8140c1347862799e1cd4c6ead2fcf0d81c832e595d60985cd",
       "after": "d323be4023bca1a4c5f541200120c020963d49d47490c9432d8c1dc3355e5b06"
+    },
+    "platform/android/java/lib/src/main/java/org/godotengine/godot/Godot.kt": {
+      "before": "ec2a0701e6378b615518989fbf942b61efc75eca81f6593b3169fa515c2a33c9",
+      "after": "372aae58cf4cab57812a2de13447cc488b557fa79902dd2319a7b767c7d17273"
     },
     "platform/android/java/lib/src/main/java/org/godotengine/godot/input/GodotGestureHandler.kt": {
       "before": "9f98995d0fdcc1fe56e38ea8519f10f6656920a57520bfa357197733e13d9549",
@@ -132,13 +140,13 @@
     },
     "scene/gui/text_edit.cpp": {
       "before": "ae20fe2f72bac6cda8d3c54d8053c3c32f26d88614f04b5da12f0a66ed2407fb",
-      "after": "77efd4c2a2ecfebe5e8ba0a500e8d7e5ee1ac86ab8ee5fc50bd84285bcae1c0a"
+      "after": "2aa3f622af45315f45e16c37b4b5628e1d3b61bd3141489260b410ee51d04e43"
     },
     "scene/gui/text_edit.h": {
       "before": "35789982d0d288c26a2974e7e7f4bc76351c7fa2077ea0424b64fd54a5359ad9",
-      "after": "4da17912d9eb11e8b3cf5a2d68bf09a6e37fc318fcb43f5e047909b770b61afa"
+      "after": "3959407975ccf3bece597dd0d5a9bf3e17239b13ef97442c931708c59292ec8b"
     }
   },
-  "preview": "3.2",
-  "accepted_recipe_base": "fa8d989724d21cfa3b53012b6c26a9399a1dc5f2"
+  "preview": "3.4.1",
+  "accepted_recipe_base": "9b227e2a321ee57115faa052db6c9e10d4348942"
 }

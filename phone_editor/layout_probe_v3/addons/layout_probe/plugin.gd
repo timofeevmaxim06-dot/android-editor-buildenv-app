@@ -214,7 +214,7 @@ func _press_text_tool(editor: Control, name: String, native_tap := false) -> voi
 			await _settle(3)
 	button.pressed.disconnect(record_press)
 	_expect(hits[0] == 1, name + " did not receive exactly one real click/tap")
-	_expect(not tools.is_visible_in_tree(), name + " left the extra commands covering code")
+	_expect(tools.is_visible_in_tree() == (name == "PhoneExtendSelection"), name + " has incorrect extra-command visibility")
 
 func _tap_button(button: Button) -> void:
 	_expect(button != null and button.is_visible_in_tree(), "Missing visible button")
@@ -360,9 +360,9 @@ func _test_2d_tools(base: Control) -> void:
 	_mark("phone_2d_tools")
 	EditorInterface.set_main_screen_editor("2D")
 	await _settle()
-	var pan := base.find_child("Phone2DPan", true, false) as Button
-	var select := base.find_child("Phone2DSelect", true, false) as Button
-	var frame := base.find_child("Phone2DFrame", true, false) as MenuButton
+	var pan := base.find_child("PhoneNative2DPan", true, false) as Button
+	var select := base.find_child("PhoneNative2DSelect", true, false) as Button
+	var frame := base.find_child("PhoneNative2DView", true, false) as MenuButton
 	await _tap_button(pan)
 	_expect(pan.button_pressed and not select.button_pressed, "2D overview mode is not active")
 	var root := EditorInterface.get_edited_scene_root()
@@ -391,9 +391,14 @@ func _test_2d_tools(base: Control) -> void:
 	_expect(not viewport.global_canvas_transform.is_equal_approx(before), "2D overview drag did not move the view")
 	_expect(marker.position == Vector2(900, 600), "2D overview drag moved the scene object")
 	_expect(EditorInterface.get_selection().get_selected_nodes() == [marker], "2D overview drag changed selection")
-	await _menu_choose(frame, 0)
-	await _menu_choose(frame, 1)
-	await _menu_choose(frame, 2)
+	var framing_items: Array[int] = []
+	for i in range(frame.get_popup().item_count):
+		var shortcut := frame.get_popup().get_item_shortcut(i)
+		if (shortcut != null and shortcut.get_as_text().contains("F")) or frame.get_popup().get_item_text(i) == "Показать всю сцену":
+			framing_items.append(i)
+	_expect(framing_items.size() == 3, "Native View menu is missing its three framing commands")
+	for i in framing_items:
+		await _menu_choose(frame, i)
 	_expect(marker.position == Vector2(900, 600), "Framing changed scene content")
 	await _tap_button(select)
 	_expect(select.button_pressed and not pan.button_pressed, "Could not return to 2D selection mode")
@@ -472,7 +477,8 @@ func _test_text_tools(base: Control, output: String) -> void:
 	for name in ["PhonePaste", "PhoneUndo", "PhoneLeft", "PhoneRight", "PhoneFontLarger", "PhoneMore"]:
 		var button := editor.find_child(name, true, false) as Control
 		_expect(button.is_visible_in_tree() and primary.get_global_rect().encloses(button.get_global_rect()), name + " is not immediately accessible")
-	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Less than half the window remains for code in compact mode")
+	var native_menu := base.find_child("PhoneScriptMenuScroll", true, false) as Control
+	_expect(code.size.y + (native_menu.size.y if native_menu != null and native_menu.is_visible_in_tree() else 0.0) >= get_tree().root.size.y * 0.5, "Code and native menu have less than half the window")
 	var status := editor.find_child("PhoneCodeStatus", true, false) as Control
 	_expect(status != null and not status.is_visible_in_tree(), "Compact mode did not hide the code status row")
 	var navigation := base.find_child("PhoneNavigation", true, false) as Control
@@ -492,6 +498,13 @@ func _test_text_tools(base: Control, output: String) -> void:
 	_inside_window(code, "code with script list")
 	_inside_window(primary, "primary code commands with script list")
 	_expect(code.size.y >= get_tree().root.size.y * 0.5, "Script list took more than half the window from code")
+	var functions_tab := base.find_child("PhoneNavigatorFunctions", true, false) as Button
+	var scripts_tab := base.find_child("PhoneNavigatorScripts", true, false) as Button
+	await _tap_button(functions_tab)
+	_expect(functions_tab.button_pressed and not scripts_tab.button_pressed, "Functions navigator did not take over the available area")
+	_inside_window(functions_tab, "Functions navigator tab")
+	await _tap_button(scripts_tab)
+	_expect(scripts_tab.button_pressed and not functions_tab.button_pressed, "Scripts navigator did not return")
 	var original_window := get_tree().root.size
 	get_tree().root.size = Vector2i(original_window.y, original_window.x)
 	await _settle()
@@ -604,6 +617,19 @@ func _run_probe() -> void:
 		return
 
 	var base: Control = EditorInterface.get_base_control()
+	if OS.get_environment("PHONE_LAYOUT_CASE") == "script_reopen_colors":
+		await _test_script_reopen_colors(base)
+		_finish_probe()
+		return
+	if OS.get_environment("PHONE_LAYOUT_CASE") == "handles_extended":
+		for window_size in [Vector2i(1536, 691), Vector2i(691, 1536)]:
+			get_tree().root.size = window_size
+			EditorInterface.set_main_screen_editor("Script")
+			EditorInterface.edit_script(load("res://phone_text_fixture.gd"), 0, 0, true)
+			await _settle(30)
+			await _test_extended_handles(base)
+		_finish_probe()
+		return
 	# Begin geometry checks in the scene workspace even if a prior test saved Script.
 	EditorInterface.set_main_screen_editor("3D")
 	await _settle()
@@ -676,7 +702,13 @@ func _run_probe() -> void:
 		await _test_2d_tools(base)
 		await _test_text_tools(base, output)
 		await _test_native_touch(base)
+		await _test_handle_loupe(base, output)
+	await _test_collapsed_text(base)
 	await _test_create_dialog(base)
+	_finish_probe()
+
+func _finish_probe() -> void:
+	var output := OS.get_environment("PHONE_LAYOUT_OUTPUT")
 	var report := {"failures": failures, "observations": observations,
 		"scope": "Linux runtime of shared phone chrome and native code actions; Injected native touch events exercised on Linux; Android dispatch, system clipboard and IME remain device checks"}
 	var report_file := FileAccess.open(output.path_join("geometry.json"), FileAccess.WRITE)
@@ -689,3 +721,214 @@ func _run_probe() -> void:
 	print("PHONE_LAYOUT_RESULT ", "PASS" if failures.is_empty() else "FAIL")
 	_mark("complete")
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _drag_finger(point: Vector2, index: int = 0) -> void:
+	var event := InputEventScreenDrag.new()
+	event.index = index
+	event.position = point
+	Input.parse_input_event(event)
+	await _settle(3)
+
+func _test_handle_loupe(base: Control, output: String) -> void:
+	_mark("handle_loupe")
+	var current := EditorInterface.get_script_editor().get_current_editor()
+	var code := current.get_base_editor() as CodeEdit
+	var original := code.text
+	var wrap := code.get_line_wrapping_mode()
+	var emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = false
+	code.set_line_wrapping_mode(TextEdit.LINE_WRAPPING_NONE)
+	code.text = ("alpha beta Привет\t" + "long_text ".repeat(80) + "\n").repeat(100)
+	var unchanged := code.text
+	var scale := float(OS.get_environment("PHONE_LAYOUT_SCALE"))
+	for direction in [Vector2.DOWN, Vector2.UP, Vector2.RIGHT, Vector2.LEFT, Vector2(1, 1), Vector2(-1, -1)]:
+		code.deselect()
+		code.set_caret_line(25)
+		code.set_caret_column(40)
+		code.set_v_scroll(20)
+		code.set_h_scroll(200)
+		code.grab_focus()
+		await _settle()
+		var target := code.get_global_rect().position + code.size * Vector2(0.4, 0.4)
+		await _touch(target, true, true)
+		await _touch(target, false, true)
+		_expect(code.has_selection(), "Handle fixture did not select a word")
+		var anchor := Vector2i(code.get_selection_origin_column(), code.get_selection_origin_line())
+		var rect := code.get_rect_at_line_column(code.get_caret_line(), code.get_caret_column())
+		var handle := code.global_position + Vector2(rect.position) + Vector2(0, code.get_line_height() + 10 * scale)
+		await _touch(handle, true)
+		var loupe := get_tree().root.find_child("PhoneSelectionLoupe", true, false) as Control
+		_expect(loupe != null and loupe.visible, "Captured handle did not show a loupe")
+		if loupe != null and loupe.visible:
+			_inside_window(loupe, "loupe")
+			_expect(loupe.size.x >= minf(340 * scale, get_tree().root.size.x - 30 * scale), "Loupe is too narrow")
+			_expect(int(loupe.get_meta("font_size")) >= 28 * scale, "Loupe text is too small")
+			_expect(not loupe.get_global_rect().grow(23 * scale).has_point(handle), "Loupe overlaps the finger exclusion area")
+			RenderingServer.force_draw(false)
+			get_viewport().get_texture().get_image().save_png(output.path_join("loupe-%sx%s-%s-%s.png" % [get_tree().root.size.x, get_tree().root.size.y, direction.x, direction.y]))
+		var edge := code.global_position + code.size * 0.5
+		if direction.x > 0: edge.x = code.get_global_rect().end.x - code.get_minimap_width() - 20 * scale
+		if direction.x < 0: edge.x = code.global_position.x + 5 * scale
+		if direction.y > 0: edge.y = code.get_global_rect().end.y - 5 * scale
+		if direction.y < 0: edge.y = code.global_position.y + 5 * scale
+		await _drag_finger(edge)
+		var before := Vector2(code.get_h_scroll(), code.get_v_scroll())
+		await get_tree().create_timer(0.3).timeout
+		var after := Vector2(code.get_h_scroll(), code.get_v_scroll())
+		if direction.x != 0: _expect((after.x - before.x) * direction.x > 0.5, "Held handle did not scroll horizontally " + str(direction))
+		if direction.y != 0: _expect((after.y - before.y) * direction.y > 0.1, "Held handle did not scroll vertically " + str(direction))
+		_expect(Vector2i(code.get_selection_origin_column(), code.get_selection_origin_line()) == anchor, "Opposite selection anchor moved")
+		await _touch(edge, false)
+		var released := Vector2(code.get_h_scroll(), code.get_v_scroll())
+		await get_tree().create_timer(0.15).timeout
+		_expect(Vector2(code.get_h_scroll(), code.get_v_scroll()).is_equal_approx(released), "Scrolling continued after releasing handle")
+		_expect(loupe == null or not loupe.visible, "Loupe remained after handle release")
+		_expect(code.text == unchanged, "Handle drag changed text")
+		observations.append({"control": "handle_scroll", "direction": str(direction), "before": str(before), "after": str(after)})
+	code.text = original
+	code.set_line_wrapping_mode(wrap)
+	code.deselect()
+	code.set_caret_line(0)
+	Input.emulate_mouse_from_touch = emulation
+
+func _test_collapsed_text(base: Control) -> void:
+	_mark("collapsed_text_470")
+	var field := CodeEdit.new()
+	field.theme = base.theme
+	field.position = Vector2(120, 160)
+	get_tree().root.add_child(field)
+	field.text = "# Привет\tмир длинная строка\n".repeat(469) + "# конец"
+	var unchanged := field.text
+	for width in [420, 80, 1, 420]:
+		field.size = Vector2(width, 0)
+		await _settle(5)
+		_expect(field.get_visible_line_count() == 0, "Collapsed fixture still has a text row")
+		field.set_caret_line(469)
+		field.set_caret_column(7)
+		field.select(451, 2, 469, 7)
+		field.adjust_viewport_to_caret()
+		field.center_viewport_to_caret()
+		field.get_last_full_visible_line()
+		field.get_last_full_visible_line_wrap_index()
+		field.set_line_wrapping_mode(TextEdit.LINE_WRAPPING_BOUNDARY)
+		await _settle(3)
+		field.size = Vector2(420, 240)
+		await _settle(5)
+		field.adjust_viewport_to_caret()
+		await _settle(5)
+		var caret := field.get_rect_at_line_column(469, 7)
+		_expect(caret.position.x >= 0 and caret.position.y >= 0 and caret.end.y <= field.size.y, "Last-line caret did not become visible after restoring text area")
+		_expect(field.text == unchanged and field.get_line_count() == 470, "Collapsed editor changed its document")
+	field.queue_free()
+	await _settle()
+	observations.append({"control": "collapsed_text_470", "scope": "Zero visible rows, four widths, wrapping, selection to last line, restoration without document mutation"})
+
+
+func _test_extended_handles(_base: Control) -> void:
+	_mark("left_handle_and_pointer_capture")
+	var code := EditorInterface.get_script_editor().get_current_editor().get_base_editor() as CodeEdit
+	var original := code.text
+	var wrap := code.get_line_wrapping_mode()
+	var emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = false
+	code.set_line_wrapping_mode(TextEdit.LINE_WRAPPING_NONE)
+	code.text = ("Привет\t" + "alpha beta ".repeat(50) + "\n\n").repeat(80)
+	var unchanged := code.text
+	var scale := float(OS.get_environment("PHONE_LAYOUT_SCALE"))
+	for direction in [Vector2.DOWN, Vector2.UP]:
+		code.deselect()
+		code.set_caret_line(24)
+		code.set_caret_column(10)
+		code.set_v_scroll(20)
+		code.set_h_scroll(0)
+		code.grab_focus()
+		await _settle()
+		var old_word := code.get_rect_at_line_column(24, 10)
+		print("LEFT_OLD_TARGET ", old_word, " old_handle_y=", old_word.position.y + code.get_line_height() + 10 * scale, " code_height=", code.size.y, " hscroll_local=", code.get_h_scroll_bar().get_global_rect().position - code.global_position, " hscroll_size=", code.get_h_scroll_bar().size)
+		var visible_line := code.get_line_column_at_pos(code.size * Vector2(0.4, 0.3)).y
+		if visible_line % 2 != 0: visible_line -= 1
+		var word := code.get_rect_at_line_column(visible_line, 10)
+		var word_point := code.global_position + Vector2(word.get_center())
+		await _touch(word_point, true, true)
+		await _touch(word_point, false, true)
+		_expect(code.has_selection(), "Left-handle fixture did not select word")
+		var anchor := Vector2i(code.get_caret_column(), code.get_caret_line())
+		var rect := code.get_rect_at_line_column(code.get_selection_origin_line(), code.get_selection_origin_column())
+		var handle := code.global_position + Vector2(rect.position) + Vector2(rect.size.x, code.get_line_height() + 10 * scale)
+		_expect(code.get_global_rect().has_point(handle), "Left handle fixture is outside the input surface")
+		await _touch(handle, true)
+		var loupe := get_tree().root.find_child("PhoneSelectionLoupe", true, false) as Control
+		_expect(loupe != null and loupe.visible, "Left handle did not show loupe")
+		var before_selection := code.get_selected_text()
+		var other := InputEventScreenTouch.new()
+		other.index = 1
+		other.position = code.get_global_rect().get_center()
+		other.pressed = true
+		Input.parse_input_event(other)
+		await _settle(3)
+		other.pressed = false
+		Input.parse_input_event(other)
+		await _settle(3)
+		_expect(code.get_selected_text() == before_selection, "Second finger replaced the captured selection")
+		_expect(loupe != null and loupe.visible, "Second-finger release ended the captured drag")
+		var edge := code.get_global_rect().get_center()
+		edge.y = code.global_position.y + 5 * scale if direction.y < 0 else code.get_global_rect().end.y - 5 * scale
+		await _drag_finger(edge)
+		var scroll := code.get_v_scroll()
+		await get_tree().create_timer(0.3).timeout
+		_expect((code.get_v_scroll() - scroll) * direction.y > 0.1, "Left handle did not continue scrolling " + str(direction))
+		_expect(Vector2i(code.get_caret_column(), code.get_caret_line()) == anchor, "Dragging left handle moved the opposite end")
+		await _touch(edge, false)
+		_expect(code.text == unchanged, "Left-handle gesture edited text")
+		_expect(loupe == null or not loupe.visible, "Left-handle release left the loupe visible")
+		observations.append({"control": "left_handle", "direction": str(direction), "second_finger": "ignored", "text": "unchanged"})
+	code.text = original
+	code.set_line_wrapping_mode(wrap)
+	code.deselect()
+	Input.emulate_mouse_from_touch = emulation
+
+
+func _test_script_reopen_colors(base: Control) -> void:
+	_mark("script_reopen_colors")
+	EditorInterface.get_editor_settings().set_setting("text_editor/appearance/enable_inline_color_picker", true)
+	var script := load("res://color_fixture.gd") as Script
+	var original := script.source_code
+	for window_size in [Vector2i(691, 1536), Vector2i(1536, 691)]:
+		get_tree().root.size = window_size
+		await _settle(10)
+		for attempt in range(6):
+			EditorInterface.set_main_screen_editor("3D")
+			await _settle(5)
+			EditorInterface.set_main_screen_editor("Script")
+			EditorInterface.edit_script(script, 0, 0, true)
+			await _settle(15)
+			var code := EditorInterface.get_script_editor().get_current_editor().get_base_editor() as CodeEdit
+			_expect(code != null, "Script did not open")
+			code.set_line_wrapping_mode(TextEdit.LINE_WRAPPING_BOUNDARY if attempt % 2 == 0 else TextEdit.LINE_WRAPPING_NONE)
+			code.set_caret_line(mini(40, code.get_line_count()-1))
+			code.adjust_viewport_to_caret()
+			var bottom: TabContainer = null
+			for node in base.find_children("*", "EditorBottomPanel", true, false): bottom = node
+			_expect(bottom != null, "Cannot locate native bottom panel")
+			if bottom != null:
+				var split := bottom.get_parent() as SplitContainer
+				_expect(split != null, "Bottom panel has no native splitter")
+				var output_tab := -1
+				for tab in range(bottom.get_tab_count()):
+					if bottom.get_tab_title(tab) in ["Output", "Вывод"]: output_tab = tab
+				_expect(output_tab >= 0, "Cannot find native Output tab")
+				if output_tab >= 0:
+					bottom.current_tab = output_tab
+					await _settle(6)
+				if split != null: split.split_offset = -window_size.y if attempt % 3 != 2 else 0
+			await _settle(20)
+			RenderingServer.force_draw(false)
+			_expect(bottom != null and bottom.current_tab >= 0, "Output panel stayed collapsed")
+			if attempt % 3 != 2:
+				_expect(code.size.y < window_size.y * 0.4, "Output panel did not compress code area")
+			_expect(code.text == original, "Opening or resizing script changed source text")
+			_expect(EditorInterface.get_editor_settings().get_setting("text_editor/appearance/enable_inline_color_picker"), "Inline color previews were disabled")
+			observations.append({"control":"script_reopen_colors", "window":str(window_size),"attempt":attempt,"wrap":code.get_line_wrapping_mode(),"code_rect":str(code.get_global_rect())})
+			if attempt == 0:
+				get_viewport().get_texture().get_image().save_png(OS.get_environment("PHONE_LAYOUT_OUTPUT").path_join("script-reopen-%sx%s.png" % [window_size.x,window_size.y]))

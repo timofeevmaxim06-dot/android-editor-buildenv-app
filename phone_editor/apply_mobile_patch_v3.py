@@ -1,4 +1,4 @@
-"""Apply the pinned Preview 3 patch after validating every source file."""
+"""Apply the pinned Phone 3.4.1 patch after validating every source file."""
 import argparse
 import hashlib
 import json
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     (validate if args.check else apply)(args.source.resolve())
-    print(json.dumps({"preview": "3.2", "status": "VALIDATED" if args.check else "PATCHED",
+    print(json.dumps({"preview": MANIFEST["preview"], "status": "VALIDATED" if args.check else "PATCHED",
                       "godot_commit": GODOT_COMMIT, "app_id": APP_ID,
                       "patch_sha256": MANIFEST["patch_sha256"],
                       "files": sorted(MANIFEST["files"])}, indent=2))

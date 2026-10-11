@@ -1,18 +1,21 @@
-name: Godot Phone Preview 3.2
+name: Godot Phone 3.4.1 - Poco CI
 
 on:
   push:
-    branches: [phone-editor-preview32-20260914]
+    branches: [phone-editor-poco-20261011]
     paths:
       - 'phone_editor/**'
       - '.github/workflows/phone-editor-v3.yml'
   workflow_dispatch:
 
+env:
+  GODOT_PHONE_BUILD_NUMBER: 3
+
 permissions:
   contents: read
 
 concurrency:
-  group: phone-editor-preview-32
+  group: phone-editor-poco-20261011
   cancel-in-progress: true
 
 jobs:
@@ -51,16 +54,16 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: godot/bin/godot.linuxbsd.editor.x86_64
-          key: phone-layout-linux-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/apply_mobile_patch_v3.py', 'recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json') }}
+          key: phone-poco-ci-20261011-r1-linux-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/apply_mobile_patch_v3.py', 'recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json') }}
       - name: Restore validated SCons object cache
         if: steps.linux-cache.outputs.cache-hit != 'true'
         id: linux-objects
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ runner.temp }}/phone-scons-layout
-          key: phone-layout-objects-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch') }}
+          key: phone-poco-ci-20261011-r1-objects-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch') }}
           restore-keys: |
-            phone-layout-objects-v3-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-
+            phone-poco-ci-20261011-r1-objects-ed1daf0b-${{ runner.os }}-${{ env.ImageVersion }}-
       - name: Compile shared editor layout code
         if: steps.linux-cache.outputs.cache-hit != 'true'
         working-directory: godot
@@ -84,10 +87,18 @@ jobs:
       - name: Upload test binary for diagnosis
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.2-linux-test-binary
+          name: godot-phone-preview-3.4.1-linux-test-binary
           path: godot/bin/godot.linuxbsd.editor.x86_64
           retention-days: 7
           if-no-files-found: error
+      - name: Check inline color objects and wrapped text ranges
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot/bin/godot.linuxbsd.editor.x86_64 --headless --script recipe/phone_editor/tests/text_server_inline_regression.gd 2>&1 | tee layout-evidence/inline-regression.log
+          if grep -E '(^|[[:space:]])(ERROR:|SCRIPT ERROR:)' layout-evidence/inline-regression.log; then exit 1; fi
+          godot/bin/godot.linuxbsd.editor.x86_64 --headless --script recipe/phone_editor/tests/repro_inline_paragraph.gd 2>&1 | tee layout-evidence/inline-paragraph.log
+          if grep -E '(^|[[:space:]])(ERROR:|SCRIPT ERROR:)' layout-evidence/inline-paragraph.log; then exit 1; fi
       - name: Exercise unified tabs, native touch and text actions at 150 and 200 percent
         shell: bash
         run: |
@@ -102,14 +113,38 @@ jobs:
             export PHONE_LAYOUT_SCALE="$phone_scale"
             export PHONE_LAYOUT_OUTPUT="$GITHUB_WORKSPACE/layout-evidence/scale-$phone_scale"
             mkdir -p "$PHONE_LAYOUT_OUTPUT"
-            if ! PHONE_LAYOUT_BOOTSTRAP=1 timeout 120 "$phone_editor_bin" --headless --editor --path recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/bootstrap.log"; then
+            export PHONE_PROBE_PROJECT="$RUNNER_TEMP/phone-probe-$phone_scale"
+            python - <<'PYPROBE'
+          import os, pathlib, shutil
+          target = pathlib.Path(os.environ['PHONE_PROBE_PROJECT'])
+          shutil.rmtree(target, ignore_errors=True)
+          shutil.copytree('recipe/phone_editor/layout_probe_v3', target, ignore=shutil.ignore_patterns('.godot', '.git', '*.uid'))
+          PYPROBE
+            if ! PHONE_LAYOUT_BOOTSTRAP=1 timeout 120 "$phone_editor_bin" --headless --editor --path "$PHONE_PROBE_PROJECT" 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/bootstrap.log"; then
               phone_probe_failed=1
               continue
             fi
-            if ! LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" recipe/phone_editor/layout_probe_v3 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/runtime.log"; then
+            if ! LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" "$PHONE_PROBE_PROJECT" 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/runtime.log"; then
               phone_probe_failed=1
             fi
             if ! python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert not r["failures"], r["failures"]; assert len(r["observations"]) >= 24' "$PHONE_LAYOUT_OUTPUT/geometry.json"; then
+              phone_probe_failed=1
+            fi
+            if grep -E '(^|[[:space:]])(ERROR:|SCRIPT ERROR:)' "$PHONE_LAYOUT_OUTPUT/runtime.log"; then
+              phone_probe_failed=1
+            fi
+            mkdir -p "$PHONE_LAYOUT_OUTPUT/extended"
+            if ! PHONE_LAYOUT_CASE=handles_extended PHONE_LAYOUT_OUTPUT="$PHONE_LAYOUT_OUTPUT/extended" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" "$PHONE_PROBE_PROJECT" 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/extended/runtime.log"; then
+              phone_probe_failed=1
+            fi
+            if grep -E '(^|[[:space:]])(ERROR:|SCRIPT ERROR:)' "$PHONE_LAYOUT_OUTPUT/extended/runtime.log"; then
+              phone_probe_failed=1
+            fi
+            mkdir -p "$PHONE_LAYOUT_OUTPUT/reopen"
+            if ! PHONE_LAYOUT_CASE=script_reopen_colors PHONE_LAYOUT_OUTPUT="$PHONE_LAYOUT_OUTPUT/reopen" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 2560x2560x24' python recipe/phone_editor/run_layout_probe.py "$phone_editor_bin" "$PHONE_PROBE_PROJECT" 2>&1 | tee "$PHONE_LAYOUT_OUTPUT/reopen/runtime.log"; then
+              phone_probe_failed=1
+            fi
+            if grep -E '(^|[[:space:]])(ERROR:|SCRIPT ERROR:)' "$PHONE_LAYOUT_OUTPUT/reopen/runtime.log"; then
               phone_probe_failed=1
             fi
           done
@@ -118,7 +153,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.2-layout
+          name: godot-phone-preview-3.4.1-layout
           path: layout-evidence/
           if-no-files-found: warn
           retention-days: 30
@@ -148,7 +183,7 @@ jobs:
           python recipe/phone_editor/test_mobile_patch_v3.py godot 2>&1 | tee evidence/source-tests.txt
           python recipe/phone_editor/apply_mobile_patch_v3.py godot | tee evidence/patch-manifest.json
           git -C godot diff --check
-          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.2.patch
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.4.1.patch
           cp recipe/phone_editor/README-v3.md evidence/README.md
           git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
           git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
@@ -203,7 +238,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: godot/platform/android/java/lib/libs/tools/debug/arm64-v8a
-          key: phone-android-v31-ed1daf0b-ndk29014206865-scons481-production-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json', 'recipe/phone_editor/apply_mobile_patch_v3.py', 'evidence/SWAPPY-SHA256.txt') }}
+          key: phone-poco-ci-20261011-r1-android-ed1daf0b-ndk29014206865-scons481-production-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('recipe/phone_editor/preview3.patch', 'recipe/phone_editor/preview3-manifest.json', 'recipe/phone_editor/apply_mobile_patch_v3.py', 'evidence/SWAPPY-SHA256.txt') }}
       - name: Test Android window geometry and compile native UI sources
         working-directory: godot/platform/android/java
         run: |
@@ -241,7 +276,7 @@ jobs:
               org.godotengine.editor.v4.phonepreview31.debug|org.godotengine.editor.v4.phonepreview31.release) ;;
               *) echo 'Unexpected application ID; refusing artifact'; exit 1 ;;
             esac
-            "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose --print-certs "$phone_apk" > "evidence/$phone_name-signature.txt"
+            java -jar "$ANDROID_HOME/build-tools/36.1.0/lib/apksigner.jar" verify --verbose --print-certs "$phone_apk" > "evidence/$phone_name-signature.txt"
             grep -q 'certificate SHA-256 digest: 921564d50b125fc1dfbe2209be475ed2172adf8be7f472532f212819715d3e8c' "evidence/$phone_name-signature.txt"
             "$ANDROID_HOME/build-tools/36.1.0/zipalign" -c -P 16 4 "$phone_apk" > "evidence/$phone_name-alignment.txt"
             python recipe/phone_editor/verify_apk.py "$phone_apk" > "evidence/$phone_name-contents.json"
@@ -254,7 +289,7 @@ jobs:
       - name: Upload APK only after verification
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.2-apk
+          name: godot-phone-preview-3.4.1-apk
           path: deliverables/
           if-no-files-found: error
           retention-days: 30
@@ -262,7 +297,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.2-evidence
+          name: godot-phone-preview-3.4.1-evidence
           path: evidence/
           if-no-files-found: warn
           retention-days: 30
