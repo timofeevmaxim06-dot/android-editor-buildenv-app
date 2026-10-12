@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "9e0785ba9fcfe84e902c9e60242254b019820aeac9fd138a58656ce45a04b9ac",
+  "patch_sha256": "02976acee6798b6b94739bad7c71824cb9ff2050b065106655076f24904f3058",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -72,7 +72,7 @@
     },
     "editor/settings/editor_settings.cpp": {
       "before": "a9b1c5ff8ff60353f8e3803218fe064f097c573d36e82113b94e347fe8f44906",
-      "after": "13c8dcd4874825fd9a1ba66c13d706b62d931139b9ab43a3c0180231deef989a"
+      "after": "73228b7ba4f7ac6611a70dccac3c6a38a6a5405eb6d52a147c164eb2c00d981e"
     },
     "editor/shader/shader_editor_plugin.cpp": {
       "before": "485b38e0f86c836c2ea727b2fd2c24de63bcfa89877cfca1defa2a7ea62bba9e",

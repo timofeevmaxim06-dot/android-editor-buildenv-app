@@ -1956,7 +1956,7 @@ index 067c3fb..82ee915 100644
  	bool is_files_panel_toggled();
  	void apply_scripts() const;
 diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
-index 8dc98d6..bbe8ff2 100644
+index 8dc98d6..9f17964 100644
 --- a/editor/settings/editor_settings.cpp
 +++ b/editor/settings/editor_settings.cpp
 @@ -640,6 +640,13 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
@@ -1981,7 +1981,7 @@ index 8dc98d6..bbe8ff2 100644
 +	// The Android display server caps its scale to fit the desktop-sized
 +	// 800x600 UI. A single-panel phone editor no longer needs that cap.
 +	// Keep the project manager and XR layout on their existing scale policy.
-+	const bool phone_mode = !singleton || !singleton->has_setting("interface/touchscreen/phone_single_panel_mode") || (bool)singleton->get("interface/touchscreen/phone_single_panel_mode");
++	const bool phone_mode = singleton.is_null() || !singleton->has_setting("interface/touchscreen/phone_single_panel_mode") || (bool)singleton->get("interface/touchscreen/phone_single_panel_mode");
 +	if (phone_mode && !Engine::get_singleton()->is_project_manager_hint() && !OS::get_singleton()->has_feature("xr_editor")) {
 +		DisplayServer *display = DisplayServer::get_singleton();
 +		const Size2i screen_size = display->screen_get_size();
