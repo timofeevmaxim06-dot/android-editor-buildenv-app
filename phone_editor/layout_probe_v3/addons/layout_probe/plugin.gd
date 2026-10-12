@@ -193,8 +193,15 @@ func _press_text_tool(editor: Control, name: String, native_tap := false) -> voi
 			await _tap_button(editor.find_child("PhoneMore", true, false) as Button)
 		tools.ensure_control_visible(button)
 	await _settle(8)
+	var symbol_bar := editor.find_child("PhoneSymbolBar", true, false) as ScrollContainer
+	var in_symbols := symbol_bar != null and symbol_bar.is_ancestor_of(button)
+	if in_symbols:
+		if not symbol_bar.is_visible_in_tree():
+			await _tap_button(editor.find_child("PhoneSymbols", true, false) as Button)
+		symbol_bar.ensure_control_visible(button)
+		await _settle(8)
 	_inside_window(button, name)
-	var bounds := tools if in_more else editor.find_child("PhoneCodePrimary", true, false) as Control
+	var bounds := (tools if in_more else symbol_bar) if (in_more or in_symbols) else editor.find_child("PhoneCodePrimary", true, false) as Control
 	_expect(bounds.get_global_rect().grow(2).encloses(button.get_global_rect()), name + " is clipped by the toolbar")
 	var hits := [0]
 	var record_press := func(): hits[0] += 1
@@ -474,7 +481,7 @@ func _test_text_tools(base: Control, output: String) -> void:
 	_inside_window(code, "code editor")
 	var primary := editor.find_child("PhoneCodePrimary", true, false) as Control
 	_inside_window(primary, "primary code commands")
-	for name in ["PhonePaste", "PhoneUndo", "PhoneLeft", "PhoneRight", "PhoneFontLarger", "PhoneMore"]:
+	for name in ["PhoneSave", "PhoneUndo", "PhoneRedo", "PhoneFind", "PhoneSymbols", "PhoneMore"]:
 		var button := editor.find_child(name, true, false) as Control
 		_expect(button.is_visible_in_tree() and primary.get_global_rect().encloses(button.get_global_rect()), name + " is not immediately accessible")
 	var native_menu := base.find_child("PhoneScriptMenuScroll", true, false) as Control
@@ -617,6 +624,13 @@ func _run_probe() -> void:
 		return
 
 	var base: Control = EditorInterface.get_base_control()
+	if OS.get_environment("PHONE_LAYOUT_CASE") == "phone_ux":
+		for window_size in [Vector2i(640, 1280), Vector2i(691, 1536), Vector2i(1536, 691)]:
+			get_tree().root.size = window_size
+			await _settle()
+			await _test_phone_ux(base)
+		_finish_probe()
+		return
 	if OS.get_environment("PHONE_LAYOUT_CASE") == "script_reopen_colors":
 		await _test_script_reopen_colors(base)
 		_finish_probe()
@@ -932,3 +946,128 @@ func _test_script_reopen_colors(base: Control) -> void:
 			observations.append({"control":"script_reopen_colors", "window":str(window_size),"attempt":attempt,"wrap":code.get_line_wrapping_mode(),"code_rect":str(code.get_global_rect())})
 			if attempt == 0:
 				get_viewport().get_texture().get_image().save_png(OS.get_environment("PHONE_LAYOUT_OUTPUT").path_join("script-reopen-%sx%s.png" % [window_size.x,window_size.y]))
+
+
+func _test_phone_ux(base: Control) -> void:
+	_mark("phone_ux")
+	EditorInterface.set_main_screen_editor("Script")
+	EditorInterface.set_main_screen_editor("Script")
+	EditorInterface.edit_script(load("res://phone_text_fixture.gd"), 0, 0, true)
+	await _settle(30)
+	var code := EditorInterface.get_script_editor().get_current_editor().get_base_editor() as CodeEdit
+	var editor := code.get_parent() as Control
+	var settings := EditorInterface.get_editor_settings()
+	var scale: float = settings.get_setting("interface/editor/appearance/custom_display_scale")
+	var original := code.text
+	var original_disk := FileAccess.get_file_as_string("res://phone_text_fixture.gd")
+	var original_emulation := Input.emulate_mouse_from_touch
+	Input.emulate_mouse_from_touch = true
+	var primary := editor.find_child("PhoneCodePrimary", true, false) as Control
+	_inside_window(primary, "phone primary commands")
+	for name in ["PhoneSave", "PhoneUndo", "PhoneRedo", "PhoneFind", "PhoneSymbols", "PhoneMore"]:
+		var button := editor.find_child(name, true, false) as Button
+		_inside_window(button, name)
+		_expect(primary.get_global_rect().encloses(button.get_global_rect()), name + " primary command clipped")
+		_expect(button.size.x >= 48 * scale and button.size.y >= 48 * scale, name + " touch target smaller than 48 editor units")
+	_expect(not code.is_drawing_minimap() and code.get_minimap_width() == 0, "Phone default minimap occupies code width")
+	await _press_text_tool(editor, "PhoneMinimap", true)
+	_expect(code.is_drawing_minimap() and code.get_minimap_width() > 0, "Minimap cannot be restored")
+	await _press_text_tool(editor, "PhoneMinimap", true)
+	_expect(not code.is_drawing_minimap() and code.get_minimap_width() == 0, "Minimap does not release its width")
+
+	var symbols := editor.find_child("PhoneSymbolBar", true, false) as ScrollContainer
+	await _press_text_tool(editor, "PhoneSymbols", true)
+	_expect(symbols.is_visible_in_tree(), "Symbol row did not open")
+	_expect(settings.get_setting("interface/touchscreen/phone_symbol_bar") == true, "Symbol preference not stored")
+	_inside_window(symbols, "symbol strip")
+	code.text = "alpha"
+	code.select(0, 0, 0, 5)
+	code.grab_focus()
+	code.clear_undo_history()
+	var pairing := code.is_auto_brace_completion_enabled()
+	code.set_auto_brace_completion_enabled(true)
+	await _press_text_tool(editor, "PhoneSymbol0", true)
+	_expect(code.text == "(alpha)", "Opening bracket did not surround selection through native CodeEdit")
+	_expect(code.has_focus(), "Symbol key stole code focus")
+	await _press_text_tool(editor, "PhoneUndo", true)
+	_expect(code.text == "alpha", "Bracket pair is not one undo operation")
+	await _press_text_tool(editor, "PhoneRedo", true)
+	_expect(code.text == "(alpha)", "Bracket pair redo failed")
+	code.text = ""
+	code.set_caret_line(0)
+	code.set_caret_column(0)
+	code.deselect()
+	await _press_text_tool(editor, "PhoneSymbol0", true)
+	_expect(code.text == "()" and code.get_caret_column() == 1, "Empty pair did not leave caret between brackets")
+	await _press_text_tool(editor, "PhoneSymbol1", true)
+	_expect(code.text == "()" and code.get_caret_column() == 2, "Closing key duplicated an existing bracket")
+	code.text = "первая\nвторая"
+	code.select(0, 0, 1, 6)
+	await _press_text_tool(editor, "PhoneIndent", true)
+	_expect(code.get_line(0).strip_edges() == "первая" and code.get_line(1).strip_edges() == "вторая" and code.get_line(0) != "первая", "Indent changed or failed to indent the selected block")
+	await _press_text_tool(editor, "PhoneUnindent", true)
+	_expect(code.text == "первая\nвторая", "Unindent did not restore selected Unicode block")
+	code.set_auto_brace_completion_enabled(pairing)
+	await _press_text_tool(editor, "PhoneSymbols", true)
+	_expect(not symbols.is_visible_in_tree() and settings.get_setting("interface/touchscreen/phone_symbol_bar") == false, "Symbol row did not close and persist")
+
+	code.text = "extends Node\n# phone_find_marker\n# phone_find_marker\n"
+	code.deselect()
+	code.set_caret_line(0)
+	code.set_caret_column(0)
+	await _press_text_tool(editor, "PhoneFind", true)
+	var search := base.find_child("PhoneFindText", true, false) as LineEdit
+	var bar := base.find_child("PhoneFindBar", true, false) as Control
+	_expect(search != null and search.is_visible_in_tree() and search.has_focus(), "Find action did not focus search field")
+	_inside_window(bar, "phone search bar")
+	search.text = "phone_find_marker"
+	search.text_changed.emit(search.text)
+	await _settle(8)
+	_expect(code.get_selected_text() == "phone_find_marker", "Search did not find requested text")
+	await _tap_button(base.find_child("PhoneFindReplaceMode", true, false) as Button)
+	_inside_window(bar, "phone replace bar")
+	for button in bar.find_children("*", "Button", true, false):
+		if button.is_visible_in_tree():
+			_inside_window(button, "find/replace " + button.name)
+	_expect(code.size.y >= 2 * code.get_line_height(), "Search/replace left no usable code area")
+	RenderingServer.force_draw(false)
+	var output := OS.get_environment("PHONE_LAYOUT_OUTPUT")
+	var window_size := get_tree().root.size
+	get_viewport().get_texture().get_image().save_png(output.path_join("search-%sx%s.png" % [window_size.x, window_size.y]))
+	await _tap_button(base.find_child("PhoneFindClose", true, false) as Button)
+	_expect(not bar.is_visible_in_tree() and code.has_focus(), "Closing find did not restore code focus")
+
+	code.text = original_disk + "\n# phone_save_marker\n"
+	await _press_text_tool(editor, "PhoneSave", true)
+	_expect(FileAccess.get_file_as_string("res://phone_text_fixture.gd").contains("# phone_save_marker"), "Save button did not write the current script")
+	code.text = original_disk
+	await _press_text_tool(editor, "PhoneSave", true)
+	_expect(FileAccess.get_file_as_string("res://phone_text_fixture.gd") == original_disk, "Saving restored fixture changed unrelated text")
+
+	var started := Time.get_ticks_usec()
+	code.text = "extends Node\n" + "# длинная строка для чтения и прокрутки ".repeat(5) + "\n" + ("# строка данных\n").repeat(10000)
+	await _settle(2)
+	var load_usec := Time.get_ticks_usec() - started
+	code.set_caret_line(9000)
+	code.adjust_viewport_to_caret()
+	await _settle(3)
+	_expect(code.get_v_scroll() > 8000 and code.get_visible_line_count() > 0, "10k-line navigation failed")
+	observations.append({"control": "phone_ux", "window": str(window_size), "scale": scale, "load_10k_lines_usec": load_usec,
+		"scope": "48-unit primary targets, minimap, native pair/selection undo-redo, Unicode block indentation, narrow find/replace, real save and 10k-line navigation. Desktop harness timing is not a Poco performance measurement."})
+	code.text = original
+	code.deselect()
+	code.set_caret_line(0)
+	code.set_caret_column(0)
+	code.set_v_scroll(0)
+	await _settle(8)
+	await _press_text_tool(editor, "PhoneSymbols", true)
+	RenderingServer.force_draw(false)
+	get_viewport().get_texture().get_image().save_png(output.path_join("code-%sx%s.png" % [window_size.x, window_size.y]))
+	await _press_text_tool(editor, "PhoneSymbols", true)
+	var actions := base.find_child("PhoneSections", true, false) as MenuButton
+	await _tap_button(actions)
+	for action_id in range(100, 106):
+		_expect(actions.get_popup().get_item_index(action_id) >= 0, "Project action missing from existing section menu")
+	_expect(base.find_child("PhoneProjectActions", true, false) == null, "Redundant project action toolbar was added")
+	actions.get_popup().hide()
+	Input.emulate_mouse_from_touch = original_emulation

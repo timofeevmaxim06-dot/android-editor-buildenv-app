@@ -1,4 +1,4 @@
-"""Apply the pinned Phone 3.4.1 patch after validating every source file."""
+"""Apply the pinned Phone 3.5.0 patch after validating every source file."""
 import argparse
 import hashlib
 import json

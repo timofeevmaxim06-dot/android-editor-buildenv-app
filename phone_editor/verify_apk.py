@@ -45,8 +45,8 @@ if __name__ == "__main__":
     package = re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'", badging)
     if not package:
         raise ValueError("Cannot read APK package and version")
-    expected_code = 40702500 + int(os.environ.get("GODOT_PHONE_BUILD_NUMBER", "3"))
-    if package[1] != "org.godotengine.editor.v4.phonepreview31.debug" or int(package[2]) != expected_code or expected_code <= 40702502:
+    expected_code = 40702500 + int(os.environ.get("GODOT_PHONE_BUILD_NUMBER", "4"))
+    if package[1] != "org.godotengine.editor.v4.phonepreview31.debug" or int(package[2]) != expected_code or expected_code <= 40702503:
         raise ValueError("APK identity or version breaks the 3.4 update path: " + package[0])
     signature = subprocess.check_output(["java", "-jar", str(build_tools / "lib/apksigner.jar"), "verify", "--verbose", "--print-certs", str(path)], text=True)
     fingerprint = "921564d50b125fc1dfbe2209be475ed2172adf8be7f472532f212819715d3e8c"
@@ -55,5 +55,5 @@ if __name__ == "__main__":
     subprocess.run([str(build_tools / "zipalign"), "-c", "-P", "16", "4", str(path)], check=True, stdout=subprocess.DEVNULL)
     result.update({"application_id":package[1], "version_code":int(package[2]), "version_name":package[3],
                    "signing":"MATCHES_3.4_CERTIFICATE", "certificate_sha256":fingerprint,
-                   "previous_version_code":40702502, "update_metadata_compatible":True, "zipalign_16k":True})
+                   "previous_version_code":40702503, "update_metadata_compatible":True, "zipalign_16k":True})
     print(json.dumps(result, indent=2))

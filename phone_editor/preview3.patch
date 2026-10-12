@@ -39,7 +39,7 @@ index a469a50..c5d5c0f 100644
  	content->set_selection_enabled(p_allow_selection);
  	content->set_context_menu_enabled(p_allow_selection);
 diff --git a/editor/docks/editor_dock_manager.cpp b/editor/docks/editor_dock_manager.cpp
-index 50b991a..79f8a52 100644
+index 50b991a..d16a38b 100644
 --- a/editor/docks/editor_dock_manager.cpp
 +++ b/editor/docks/editor_dock_manager.cpp
 @@ -29,10 +29,14 @@
@@ -65,7 +65,7 @@ index 50b991a..79f8a52 100644
  #include "scene/gui/popup_menu.h"
  #include "scene/gui/split_container.h"
  #include "scene/gui/tab_container.h"
-@@ -195,7 +200,90 @@ void EditorDockManager::_update_layout() {
+@@ -195,7 +200,102 @@ void EditorDockManager::_update_layout() {
  	EditorNode::get_singleton()->save_editor_layout_delayed();
  }
  
@@ -102,9 +102,21 @@ index 50b991a..79f8a52 100644
 +		menu->add_radio_check_item(button->get_text(), id);
 +		menu->set_item_checked(id, button->is_pressed());
 +	}
++	menu->add_separator();
++	menu->add_icon_item(phone_sections->get_editor_theme_icon(SNAME("MainPlay")), TTR("Run Project"), 100);
++	menu->add_icon_item(phone_sections->get_editor_theme_icon(SNAME("PlayScene")), TTR("Run Current Scene"), 101);
++	menu->add_icon_item(phone_sections->get_editor_theme_icon(SNAME("Stop")), TTR("Stop"), 102);
++	menu->add_separator();
++	menu->add_icon_item(phone_sections->get_editor_theme_icon(SNAME("Save")), String::utf8("Сохранить сцены и скрипты"), 103);
++	menu->add_item(TTR("Editor Settings..."), 104);
++	menu->add_item(TTR("Export..."), 105);
 +}
 +
 +void EditorDockManager::_phone_section_selected(int p_id) {
++	if (p_id >= 100 && p_id <= 105) {
++		EditorNode::get_singleton()->execute_phone_action(p_id - 100);
++		return;
++	}
 +	ERR_FAIL_INDEX(p_id, phone_section_targets.size());
 +	Button *button = ObjectDB::get_instance<Button>(phone_section_targets[p_id]);
 +	if (button && button->is_visible() && !button->is_disabled()) {
@@ -156,7 +168,7 @@ index 50b991a..79f8a52 100644
  	docks_menu->clear();
  	docks_menu->reset_size();
  
-@@ -324,10 +412,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
+@@ -324,10 +424,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
  			p_window_dump.get("window_screen_rect", Rect2i()));
  }
  
@@ -178,7 +190,7 @@ index 50b991a..79f8a52 100644
 +	Button *choose = memnew(Button);
 +	choose->set_name("PhoneChooseNode");
 +	choose->set_text(String::utf8("Выбрать узел"));
-+	choose->set_custom_minimum_size(Size2(0, 34) * EDSCALE);
++	choose->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +	choose->connect(SceneStringName(pressed), callable_mp(this, &EditorDockManager::_phone_choose_node));
 +	context->add_child(choose);
 +	EditorNode::get_singleton()->get_editor_selection()->connect("selection_changed", callable_mp(this, &EditorDockManager::_update_phone_context));
@@ -214,7 +226,7 @@ index 50b991a..79f8a52 100644
  	Node *parent = p_dock->get_parent();
  	if (parent == p_target) {
  		if (parent && p_tab_index >= 0) {
-@@ -701,11 +836,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -701,11 +848,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  	}
  
  	DockTabContainer *tab_container = p_dock->get_parent_container();
@@ -232,7 +244,7 @@ index 50b991a..79f8a52 100644
  		tab_container->get_tab_bar()->grab_focus();
  	}
  
-@@ -713,6 +853,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -713,6 +865,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  		int tab_index = tab_container->get_tab_idx_from_control(p_dock);
  		tab_container->set_current_tab(tab_index);
  	}
@@ -240,7 +252,7 @@ index 50b991a..79f8a52 100644
  }
  
  void EditorDockManager::focus_dock(EditorDock *p_dock) {
-@@ -737,6 +878,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
+@@ -737,6 +890,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
  
  	p_dock->dock_slot_index = p_dock->default_slot;
  	all_docks.push_back(p_dock);
@@ -251,7 +263,7 @@ index 50b991a..79f8a52 100644
 +		button->set_toggle_mode(true);
 +		button->set_focus_mode(Control::FOCUS_NONE);
 +		button->set_mouse_filter(Control::MOUSE_FILTER_PASS);
-+		button->set_custom_minimum_size(Size2(0, 32 * EDSCALE));
++		button->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +		button->connect(SceneStringName(pressed), callable_mp(this, &EditorDockManager::focus_dock).bind(p_dock));
 +		phone_navigation->add_child(button);
 +		phone_buttons.insert(p_dock, button);
@@ -259,7 +271,7 @@ index 50b991a..79f8a52 100644
  	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  
-@@ -755,6 +908,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
+@@ -755,6 +920,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
  
  	_move_dock(p_dock, nullptr);
  
@@ -317,7 +329,7 @@ index caf7277..9adc005 100644
  	void update_tab_styles();
  	void set_tab_icon_max_width(int p_max_width);
 diff --git a/editor/editor_main_screen.cpp b/editor/editor_main_screen.cpp
-index 730be32..7897a9e 100644
+index 730be32..33a84dc 100644
 --- a/editor/editor_main_screen.cpp
 +++ b/editor/editor_main_screen.cpp
 @@ -33,11 +33,14 @@
@@ -388,7 +400,7 @@ index 730be32..7897a9e 100644
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
 +		tb->set_focus_mode(Control::FOCUS_NONE);
 +		tb->set_mouse_filter(Control::MOUSE_FILTER_PASS);
-+		tb->set_custom_minimum_size(Size2(0, 32 * EDSCALE));
++		tb->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +	}
  
  	Ref<Shortcut> shortcut = EditorSettings::get_singleton()->get_shortcut("editor/editor_" + p_editor->get_plugin_name().to_lower());
@@ -414,7 +426,7 @@ index 78ec499..db38de4 100644
  	bool is_button_enabled(int p_index) const;
  
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
-index 5bc4649..00a7c62 100644
+index 5bc4649..98dd76a 100644
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
 @@ -30,6 +30,9 @@
@@ -437,7 +449,39 @@ index 5bc4649..00a7c62 100644
  
  #include "modules/modules_enabled.gen.h" // For gdscript, mono.
  
-@@ -8292,7 +8293,6 @@ void EditorNode::_bottom_panel_resized() {
+@@ -2062,6 +2063,31 @@ void EditorNode::clear_node_reference(Ref<Resource> p_res) {
+ 	}
+ }
+ 
++void EditorNode::execute_phone_action(int p_action) {
++	// Route through the editor's existing save/run lifecycle and error dialogs.
++	if (ScriptEditor *script_editor = ScriptEditor::get_singleton()) {
++		if (ScriptEditorBase *current = script_editor->get_current_editor()) {
++			if (TextEditorBase *text = Object::cast_to<TextEditorBase>(current)) {
++				text->get_code_editor()->get_text_editor()->apply_ime();
++			}
++		}
++	}
++#ifdef ANDROID_ENABLED
++	DisplayServer::get_singleton()->virtual_keyboard_hide();
++#endif
++	switch (p_action) {
++		case 0: project_run_bar->play_main_scene(); break;
++		case 1: project_run_bar->play_current_scene(); break;
++		case 2: project_run_bar->stop_playing(); break;
++		case 3: {
++			ScriptEditor::get_singleton()->save_all_scripts();
++			_menu_option(SCENE_SAVE_ALL_SCENES);
++		} break;
++		case 4: _menu_option(EDITOR_OPEN_SETTINGS); break;
++		case 5: _menu_option(PROJECT_EXPORT); break;
++	}
++}
++
+ void EditorNode::_menu_option(int p_option) {
+ 	_menu_option_confirm(p_option, false);
+ }
+@@ -8292,7 +8318,6 @@ void EditorNode::_bottom_panel_resized() {
  	bottom_panel->set_bottom_panel_offset(center_split->get_split_offset());
  }
  
@@ -445,7 +489,7 @@ index 5bc4649..00a7c62 100644
  void EditorNode::_touch_actions_panel_mode_changed() {
  	int panel_mode = EDITOR_GET("interface/touchscreen/touch_actions_panel");
  	switch (panel_mode) {
-@@ -8318,7 +8318,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
+@@ -8318,7 +8343,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
  			break;
  	}
  }
@@ -453,7 +497,7 @@ index 5bc4649..00a7c62 100644
  
  #ifdef MACOS_ENABLED
  extern "C" GameViewPluginBase *get_game_view_plugin();
-@@ -8479,7 +8478,13 @@ EditorNode::EditorNode() {
+@@ -8479,7 +8503,13 @@ EditorNode::EditorNode() {
  	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
  	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
  	if (w) {
@@ -468,7 +512,7 @@ index 5bc4649..00a7c62 100644
  		w->set_min_size(minimum_size); // Calling it this early doesn't sync the property with DS.
  		DisplayServer::get_singleton()->window_set_min_size(minimum_size);
  	}
-@@ -8672,12 +8677,28 @@ EditorNode::EditorNode() {
+@@ -8672,12 +8702,28 @@ EditorNode::EditorNode() {
  
  	main_vbox = memnew(VBoxContainer);
  
@@ -498,7 +542,7 @@ index 5bc4649..00a7c62 100644
  
  	main_hbox = memnew(HBoxContainer);
  	main_hbox->add_child(main_vbox);
-@@ -8688,12 +8709,25 @@ EditorNode::EditorNode() {
+@@ -8688,12 +8734,25 @@ EditorNode::EditorNode() {
  	_touch_actions_panel_mode_changed();
  
  	gui_base->add_child(base_vbox);
@@ -527,7 +571,7 @@ index 5bc4649..00a7c62 100644
  
  	DockSplitContainer *main_vsplit = memnew(DockSplitContainer);
  	main_vsplit->set_name("DockVSplitMain");
-@@ -8711,6 +8745,7 @@ EditorNode::EditorNode() {
+@@ -8711,6 +8770,7 @@ EditorNode::EditorNode() {
  	left_l_vsplit->set_vertical(true);
  	main_hsplit->add_child(left_l_vsplit);
  
@@ -535,7 +579,7 @@ index 5bc4649..00a7c62 100644
  	LocalVector<DockTabContainer *> dock_slots;
  	{
  		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
-@@ -8864,6 +8899,58 @@ EditorNode::EditorNode() {
+@@ -8864,6 +8924,60 @@ EditorNode::EditorNode() {
  	srt->add_child(editor_main_screen);
  	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
  
@@ -578,9 +622,11 @@ index 5bc4649..00a7c62 100644
 +		center_vb->move_child(navigation_bar, 0);
 +		MenuButton *sections = memnew(MenuButton);
 +		sections->set_name("PhoneSections");
-+		sections->set_text(String::utf8("☰"));
-+		sections->set_tooltip_text(String::utf8("Все разделы редактора"));
-+		sections->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++		sections->set_button_icon(theme->get_icon(SNAME("GuiTabMenu"), EditorStringName(EditorIcons)));
++		sections->set_tooltip_text(String::utf8("Разделы и действия проекта"));
++		sections->set_accessibility_name(String::utf8("Меню редактора"));
++		sections->set_theme_type_variation(SceneStringName(FlatButton));
++		sections->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +		navigation_bar->add_child(sections);
 +		navigation_bar->add_child(navigation_scroll);
 +		phone_navigation = memnew(HBoxContainer);
@@ -594,7 +640,7 @@ index 5bc4649..00a7c62 100644
  	scene_root = memnew(SubViewport);
  	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
  	scene_root->set_translation_domain(StringName());
-@@ -9076,8 +9163,13 @@ EditorNode::EditorNode() {
+@@ -9076,8 +9190,13 @@ EditorNode::EditorNode() {
  	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
  	main_editor_button_hb->set_name("EditorMainScreenButtons");
  	editor_main_screen->set_button_container(main_editor_button_hb);
@@ -610,7 +656,7 @@ index 5bc4649..00a7c62 100644
  
  	// Spacer to center 2D / 3D / Script buttons.
  	right_spacer = memnew(Control);
-@@ -9190,6 +9282,7 @@ EditorNode::EditorNode() {
+@@ -9190,6 +9309,7 @@ EditorNode::EditorNode() {
  	history_dock = memnew(HistoryDock);
  	editor_dock_manager->add_dock(history_dock);
  
@@ -619,7 +665,7 @@ index 5bc4649..00a7c62 100644
  	const int dock_hsize = 280;
  	// By default there is only 3 visible, so set 2 split offsets for them.
 diff --git a/editor/editor_node.h b/editor/editor_node.h
-index f683e13..be4e03d 100644
+index f683e13..8e739cc 100644
 --- a/editor/editor_node.h
 +++ b/editor/editor_node.h
 @@ -104,9 +104,7 @@ class ProjectSettingsEditor;
@@ -645,8 +691,16 @@ index f683e13..be4e03d 100644
  
  	ConfirmationDialog *video_restart_dialog = nullptr;
  
+@@ -804,6 +800,7 @@ public:
+ 	ProjectSettingsEditor *get_project_settings() { return project_settings_editor; }
+ 
+ 	void trigger_menu_option(int p_option, bool p_confirmed);
++	void execute_phone_action(int p_action);
+ 	bool has_previous_closed_scenes() const;
+ 
+ 	void new_inherited_scene() { _menu_option_confirm(SCENE_NEW_INHERITED_SCENE, false); }
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..b5a2b37 100644
+index aceecca..5f825d5 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -672,7 +726,85 @@ index aceecca..b5a2b37 100644
  #include "scene/main/timer.h"
  #include "scene/resources/font.h"
  
-@@ -1133,6 +1137,9 @@ void CodeTextEditor::update_editor_settings() {
+@@ -865,6 +869,58 @@ FindReplaceBar::FindReplaceBar() {
+ 	hide_button->connect(SceneStringName(pressed), callable_mp(this, &FindReplaceBar::_hide_bar));
+ 	hide_button->set_v_size_flags(SIZE_SHRINK_CENTER);
+ 	add_child(hide_button);
++
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		set_name("PhoneFindBar");
++		VBoxContainer *stack = memnew(VBoxContainer);
++		stack->set_h_size_flags(SIZE_EXPAND_FILL);
++		add_child(stack);
++		HBoxContainer *search_row = memnew(HBoxContainer);
++		stack->add_child(search_row);
++		HBoxContainer *options_row = memnew(HBoxContainer);
++		stack->add_child(options_row);
++		auto move = [](Control *p_control, Node *p_parent) {
++			p_control->get_parent()->remove_child(p_control);
++			p_parent->add_child(p_control);
++		};
++		move(search_text, search_row);
++		search_text->set_name("PhoneFindText");
++		search_text->set_h_size_flags(SIZE_EXPAND_FILL);
++		move(find_prev, search_row);
++		move(find_next, search_row);
++		move(hide_button, search_row);
++		hide_button->set_name("PhoneFindClose");
++		move(toggle_replace_button, options_row);
++		toggle_replace_button->set_name("PhoneFindReplaceMode");
++		move(matches_label, options_row);
++		matches_label->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
++		matches_label->set_h_size_flags(SIZE_EXPAND_FILL);
++		move(case_sensitive, options_row);
++		case_sensitive->set_text("Aa");
++		case_sensitive->set_tooltip_text(TTR("Match Case"));
++		case_sensitive->set_accessibility_name(TTR("Match Case"));
++		move(whole_words, options_row);
++		whole_words->set_text("Ab|");
++		whole_words->set_tooltip_text(TTR("Whole Words"));
++		whole_words->set_accessibility_name(TTR("Whole Words"));
++		move(hbc_button_replace, stack);
++		move(replace_text, hbc_button_replace);
++		hbc_button_replace->move_child(replace_text, 0);
++		replace_text->set_h_size_flags(SIZE_EXPAND_FILL);
++		move(hbc_option_replace, stack);
++		move(replace_all, hbc_option_replace);
++		hbc_option_replace->move_child(replace_all, 0);
++		selection_only->set_text(String::utf8("В выделении"));
++		for (Control *control : { (Control *)search_text, (Control *)replace_text,
++				(Control *)toggle_replace_button, (Control *)find_prev, (Control *)find_next,
++				(Control *)hide_button, (Control *)case_sensitive, (Control *)whole_words,
++				(Control *)replace, (Control *)replace_all, (Control *)selection_only }) {
++			control->set_custom_minimum_size(Size2(MAX(control->get_custom_minimum_size().x, 48 * EDSCALE), 48 * EDSCALE));
++		}
++		memdelete(vbc_lineedit);
++		memdelete(vbc_button);
++		memdelete(vbc_option);
++	}
+ }
+ 
+ /*** CODE EDITOR ****/
+@@ -1126,13 +1182,26 @@ void CodeTextEditor::update_editor_settings() {
+ 	text_editor->set_line_numbers_zero_padded(EDITOR_GET("text_editor/appearance/gutters/line_numbers_zero_padded"));
+ 
+ 	// Appearance: Minimap
+-	text_editor->set_draw_minimap(EDITOR_GET("text_editor/appearance/minimap/show_minimap"));
+-	text_editor->set_minimap_width((int)EDITOR_GET("text_editor/appearance/minimap/minimap_width") * EDSCALE);
++	const bool phone_mode = EDITOR_GET("interface/touchscreen/phone_single_panel_mode");
++	const bool show_minimap = phone_mode ? (bool)EDITOR_GET("interface/touchscreen/phone_code_minimap") : (bool)EDITOR_GET("text_editor/appearance/minimap/show_minimap");
++	text_editor->set_draw_minimap(show_minimap);
++	text_editor->set_minimap_width(show_minimap ? (int)EDITOR_GET("text_editor/appearance/minimap/minimap_width") * EDSCALE : 0);
++	if (phone_minimap_button) {
++		phone_minimap_button->set_pressed_no_signal(show_minimap);
++	}
++	if (phone_symbol_bar) {
++		const bool show_symbols = EDITOR_GET("interface/touchscreen/phone_symbol_bar");
++		phone_symbol_bar->set_visible(show_symbols);
++		phone_symbols_button->set_pressed_no_signal(show_symbols);
++	}
+ 
+ 	// Appearance: Lines
  	text_editor->set_line_folding_enabled(EDITOR_GET("text_editor/appearance/lines/code_folding"));
  	text_editor->set_draw_fold_gutter(EDITOR_GET("text_editor/appearance/lines/code_folding"));
  	text_editor->set_line_wrapping_mode((TextEdit::LineWrappingMode)EDITOR_GET("text_editor/appearance/lines/word_wrap").operator int());
@@ -682,7 +814,28 @@ index aceecca..b5a2b37 100644
  	text_editor->set_autowrap_mode((TextServer::AutowrapMode)EDITOR_GET("text_editor/appearance/lines/autowrap_mode").operator int());
  
  	// Appearance: Whitespace
-@@ -1729,7 +1736,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
+@@ -1610,6 +1679,20 @@ void CodeTextEditor::goto_error() {
+ 
+ void CodeTextEditor::_update_text_editor_theme() {
+ 	emit_signal(SNAME("load_theme_settings"));
++	if (phone_save_button) {
++		phone_save_button->set_button_icon(get_editor_theme_icon(SNAME("Save")));
++		phone_find_button->set_button_icon(get_editor_theme_icon(SNAME("Search")));
++		const char *button_names[] = { "PhoneUndo", "PhoneRedo", "PhoneSymbols", "PhoneMore", "PhoneKeyLeft", "PhoneKeyRight" };
++		const char *icon_names[] = { "UndoRedo", "Redo", "Keyboard", "GuiTabMenu", "Back", "Forward" };
++		const char *labels[] = { TTRC("Undo"), TTRC("Redo"), TTRC("Keyboard"), TTRC("Tools"), TTRC("Move Left"), TTRC("Move Right") };
++		for (int i = 0; i < 6; i++) {
++			if (Button *button = Object::cast_to<Button>(find_child(button_names[i], true, false))) {
++				button->set_text("");
++				button->set_button_icon(get_editor_theme_icon(icon_names[i]));
++				button->set_accessibility_name(TTR(labels[i]));
++			}
++		}
++	}
+ 
+ 	const Ref<Font> status_bar_font = get_theme_font(SNAME("status_source"), EditorStringName(EditorFonts));
+ 	const int status_bar_font_size = get_theme_font_size(SNAME("status_source_size"), EditorStringName(EditorFonts));
+@@ -1729,7 +1812,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
  void CodeTextEditor::_toggle_files_pressed() {
  	ERR_FAIL_NULL(toggle_files_list);
  	toggle_files_list->set_visible(!toggle_files_list->is_visible());
@@ -691,7 +844,7 @@ index aceecca..b5a2b37 100644
  	update_toggle_files_button();
  }
  
-@@ -1885,7 +1892,7 @@ void CodeTextEditor::_zoom_out() {
+@@ -1885,7 +1968,7 @@ void CodeTextEditor::_zoom_out() {
  }
  
  void CodeTextEditor::_zoom_to(float p_zoom_factor) {
@@ -700,7 +853,15 @@ index aceecca..b5a2b37 100644
  		return;
  	}
  
-@@ -1946,6 +1953,138 @@ void CodeTextEditor::update_toggle_files_button() {
+@@ -1917,6 +2000,7 @@ void CodeTextEditor::_show_goto_popup_request() {
+ }
+ 
+ void CodeTextEditor::_bind_methods() {
++	ADD_SIGNAL(MethodInfo("request_save"));
+ 	ADD_SIGNAL(MethodInfo("validate_script"));
+ 	ADD_SIGNAL(MethodInfo("load_theme_settings"));
+ 	ADD_SIGNAL(MethodInfo("show_errors_panel"));
+@@ -1946,6 +2030,176 @@ void CodeTextEditor::update_toggle_files_button() {
  	toggle_files_button->set_tooltip_text(vformat("%s (%s)", TTR("Toggle Files Panel"), ED_GET_SHORTCUT("script_editor/toggle_files_panel")->get_as_text()));
  }
  
@@ -712,6 +873,34 @@ index aceecca..b5a2b37 100644
 +void CodeTextEditor::_phone_hide_more() {
 +	phone_extra_tools->hide();
 +	phone_more_button->set_pressed_no_signal(false);
++}
++
++void CodeTextEditor::_phone_symbols_toggled(bool p_enabled) {
++	EditorSettings::get_singleton()->set("interface/touchscreen/phone_symbol_bar", p_enabled);
++	phone_symbol_bar->set_visible(p_enabled);
++}
++
++void CodeTextEditor::_phone_minimap_toggled(bool p_enabled) {
++	EditorSettings::get_singleton()->set("interface/touchscreen/phone_code_minimap", p_enabled);
++	text_editor->set_draw_minimap(p_enabled);
++	text_editor->set_minimap_width(p_enabled ? (int)EDITOR_GET("text_editor/appearance/minimap/minimap_width") * EDSCALE : 0);
++}
++
++void CodeTextEditor::_phone_insert_symbol(const String &p_symbol) {
++	ERR_FAIL_COND(p_symbol.length() != 1);
++	phone_scroll_button->set_pressed(false);
++	text_editor->grab_focus();
++	text_editor->apply_ime();
++	// Use CodeEdit's native input path: pairing, multicaret, undo and configured
++	// indentation keep the same semantics as a physical keyboard.
++	Ref<InputEventKey> key;
++	key.instantiate();
++	key->set_unicode(p_symbol[0]);
++	key->set_pressed(true);
++	text_editor->begin_complex_operation();
++	text_editor->gui_input(key);
++	text_editor->end_complex_operation();
++	text_editor->refresh_virtual_keyboard();
 +}
 +
 +void CodeTextEditor::_phone_wrap_toggled(bool p_enabled) {
@@ -727,8 +916,10 @@ index aceecca..b5a2b37 100644
 +	Button *button = memnew(Button);
 +	button->set_name(p_name);
 +	button->set_text(p_label);
++	button->set_theme_type_variation(SceneStringName(FlatButton));
++	button->set_accessibility_name(p_label);
 +	button->set_focus_mode(FOCUS_NONE); // Keep selection and the Android IME on the code.
-+	button->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++	button->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +	if (p_name != "PhoneExtendSelection") {
 +		button->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_phone_hide_more));
 +	}
@@ -808,6 +999,14 @@ index aceecca..b5a2b37 100644
 +			text_editor->set_virtual_keyboard_show_on_focus(false);
 +		} break;
 +		case 8: _show_goto_popup_request(); break;
++		case 17: emit_signal(SNAME("request_save")); break;
++		case 18: {
++			if (find_replace_bar) {
++				find_replace_bar->popup_search();
++			}
++		} break;
++		case 19: text_editor->indent_lines(); break;
++		case 20: text_editor->unindent_lines(); break;
 +		case 9: {
 +#ifdef ANDROID_ENABLED
 +			DisplayServer::get_singleton()->virtual_keyboard_hide();
@@ -831,7 +1030,7 @@ index aceecca..b5a2b37 100644
 +			text_editor->gui_input(key);
 +		} break;
 +	}
-+	if (p_action != 7 && p_action != 8 && p_action != 9 && p_action != 16) {
++	if (p_action != 7 && p_action != 8 && p_action != 9 && p_action != 16 && p_action != 18) {
 +		text_editor->refresh_virtual_keyboard();
 +	}
 +}
@@ -839,7 +1038,7 @@ index aceecca..b5a2b37 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,10 +2102,101 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2217,143 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
@@ -848,6 +1047,7 @@ index aceecca..b5a2b37 100644
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
 +		HBoxContainer *primary = memnew(HBoxContainer);
 +		primary->set_name("PhoneCodePrimary");
++		primary->add_theme_constant_override("separation", 2 * EDSCALE);
 +		add_child(primary);
 +		move_child(primary, 0);
 +		ScrollContainer *tools = memnew(ScrollContainer);
@@ -865,12 +1065,15 @@ index aceecca..b5a2b37 100644
 +		tools->add_child(row);
 +		// Compact script mode keeps code usable at 200%; Panels restores navigation.
 +		_phone_add_action(row, "PhonePanels", String::utf8("Панели"), 9);
-+		_phone_add_action(primary, "PhonePaste", String::utf8("Вставить"), 0);
++		phone_save_button = _phone_add_action(primary, "PhoneSave", "", 17);
++		phone_save_button->set_tooltip_text(TTR("Save"));
++		phone_save_button->set_accessibility_name(TTR("Save"));
++		_phone_add_action(row, "PhonePaste", String::utf8("Вставить"), 0);
 +		_phone_add_action(primary, "PhoneUndo", String::utf8("↶"), 3)->set_tooltip_text(String::utf8("Отменить последнее изменение"));
 +		_phone_add_action(row, "PhoneSelectLine", String::utf8("Строка"), 5);
 +		_phone_add_action(row, "PhoneCopy", String::utf8("Копировать"), 1);
-+		_phone_add_action(primary, "PhoneLeft", String::utf8("←"), 10)->set_tooltip_text(String::utf8("Курсор влево; в режиме «Выделять» — расширить выделение"));
-+		_phone_add_action(primary, "PhoneRight", String::utf8("→"), 11)->set_tooltip_text(String::utf8("Курсор вправо; в режиме «Выделять» — расширить выделение"));
++		_phone_add_action(row, "PhoneLeft", String::utf8("←"), 10)->set_tooltip_text(String::utf8("Курсор влево; в режиме «Выделять» — расширить выделение"));
++		_phone_add_action(row, "PhoneRight", String::utf8("→"), 11)->set_tooltip_text(String::utf8("Курсор вправо; в режиме «Выделять» — расширить выделение"));
 +		phone_select_button = _phone_add_action(row, "PhoneExtendSelection", String::utf8("Выделять"), -1);
 +		phone_select_button->set_toggle_mode(true);
 +		phone_select_button->set_tooltip_text(String::utf8("Включите и нажимайте стрелки, чтобы точно выделить текст."));
@@ -884,7 +1087,14 @@ index aceecca..b5a2b37 100644
 +		_phone_add_action(row, "PhoneHome", String::utf8("Начало"), 14);
 +		_phone_add_action(row, "PhoneEnd", String::utf8("Конец"), 15);
 +		_phone_add_action(row, "PhoneCut", String::utf8("Вырезать"), 2);
-+		_phone_add_action(row, "PhoneRedo", String::utf8("Повтор"), 4);
++		_phone_add_action(primary, "PhoneRedo", String::utf8("↷"), 4)->set_tooltip_text(String::utf8("Повторить изменение"));
++		phone_find_button = _phone_add_action(primary, "PhoneFind", "", 18);
++		phone_find_button->set_tooltip_text(TTR("Find"));
++		phone_find_button->set_accessibility_name(TTR("Find"));
++		phone_symbols_button = _phone_add_action(primary, "PhoneSymbols", "{}", -1);
++		phone_symbols_button->set_toggle_mode(true);
++		phone_symbols_button->set_tooltip_text(String::utf8("Символы, отступы и стрелки над клавиатурой"));
++		phone_symbols_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_symbols_toggled));
 +		_phone_add_action(row, "PhoneSelectAll", String::utf8("Всё"), 6);
 +		_phone_add_action(row, "PhoneGoToLine", String::utf8("К строке"), 8);
 +		_phone_add_action(row, "PhoneScripts", String::utf8("Скрипты"), 16);
@@ -894,7 +1104,7 @@ index aceecca..b5a2b37 100644
 +		font_smaller->set_tooltip_text(String::utf8("Уменьшить шрифт кода. Размер панелей не меняется."));
 +		font_smaller->set_accessibility_name(TTRC("Zoom Out"));
 +		font_smaller->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_out));
-+		Button *font_larger = _phone_add_action(primary, "PhoneFontLarger", String::utf8("А+"), -1);
++		Button *font_larger = _phone_add_action(row, "PhoneFontLarger", String::utf8("А+"), -1);
 +		font_larger->set_tooltip_text(String::utf8("Увеличить шрифт кода. Размер панелей не меняется."));
 +		font_larger->set_accessibility_name(TTRC("Zoom In"));
 +		font_larger->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_in));
@@ -902,6 +1112,10 @@ index aceecca..b5a2b37 100644
 +		font_reset->set_tooltip_text(String::utf8("Вернуть размер шрифта кода из настроек редактора."));
 +		font_reset->set_accessibility_name(TTRC("Reset Zoom"));
 +		font_reset->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_zoom_to).bind(1.0f));
++		phone_minimap_button = _phone_add_action(row, "PhoneMinimap", String::utf8("Карта кода"), -1);
++		phone_minimap_button->set_toggle_mode(true);
++		phone_minimap_button->set_tooltip_text(String::utf8("Миникарта кода. Отключите, чтобы освободить ширину экрана."));
++		phone_minimap_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_minimap_toggled));
 +		phone_wrap_button = _phone_add_action(row, "PhoneWrap", String::utf8("Перенос строк"), -1);
 +		phone_wrap_button->set_toggle_mode(true);
 +		phone_wrap_button->set_pressed_no_signal((int)EDITOR_GET("text_editor/appearance/lines/word_wrap") != TextEdit::LINE_WRAPPING_NONE);
@@ -909,13 +1123,40 @@ index aceecca..b5a2b37 100644
 +		phone_wrap_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_wrap_toggled));
 +		phone_more_button = memnew(Button);
 +		phone_more_button->set_name("PhoneMore");
++		phone_more_button->set_theme_type_variation(SceneStringName(FlatButton));
 +		phone_more_button->set_text(String::utf8("⋮"));
 +		phone_more_button->set_tooltip_text(String::utf8("Все команды кода"));
 +		phone_more_button->set_focus_mode(FOCUS_NONE);
 +		phone_more_button->set_toggle_mode(true);
-+		phone_more_button->set_custom_minimum_size(Size2(36, 34) * EDSCALE);
++		phone_more_button->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
 +		primary->add_child(phone_more_button);
 +		phone_more_button->connect(SceneStringName(toggled), callable_mp(this, &CodeTextEditor::_phone_show_more));
++		// A collapsible, horizontally scrollable key row stays below the code and
++		// above the Android keyboard spacer. It never expands the window's width.
++		ScrollContainer *symbols = memnew(ScrollContainer);
++		symbols->set_name("PhoneSymbolBar");
++		symbols->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		symbols->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
++		symbols->set_h_size_flags(SIZE_EXPAND_FILL);
++		add_child(symbols);
++		phone_symbol_bar = symbols;
++		HBoxContainer *keys = memnew(HBoxContainer);
++		symbols->add_child(keys);
++		_phone_add_action(keys, "PhoneKeyLeft", String::utf8("←"), 10)->set_tooltip_text(TTR("Move Left"));
++		_phone_add_action(keys, "PhoneKeyRight", String::utf8("→"), 11)->set_tooltip_text(TTR("Move Right"));
++		_phone_add_action(keys, "PhoneIndent", String::utf8("⇥"), 19)->set_tooltip_text(TTR("Indent"));
++		_phone_add_action(keys, "PhoneUnindent", String::utf8("⇤"), 20)->set_tooltip_text(TTR("Unindent"));
++		const String symbol_keys = "()[]{}\"':_=.,+-*/#@";
++		for (int i = 0; i < symbol_keys.length(); i++) {
++			String symbol = symbol_keys.substr(i, 1);
++			Button *key = _phone_add_action(keys, "PhoneSymbol" + itos(i), symbol, -1);
++			key->set_tooltip_text(vformat(TTR("Insert %s"), symbol));
++			key->connect(SceneStringName(pressed), callable_mp(this, &CodeTextEditor::_phone_insert_symbol).bind(symbol));
++		}
++		_phone_add_action(keys, "PhoneKeyPaste", String::utf8("Вставить"), 0);
++		const bool show_symbols = EDITOR_GET("interface/touchscreen/phone_symbol_bar");
++		symbols->set_visible(show_symbols);
++		phone_symbols_button->set_pressed_no_signal(show_symbols);
 +		phone_scroll_surface = memnew(Control);
 +		phone_scroll_surface->set_name("PhoneCodeScrollSurface");
 +		text_editor->add_child(phone_scroll_surface);
@@ -943,10 +1184,10 @@ index aceecca..b5a2b37 100644
  	status_bar->set_custom_minimum_size(Size2(0, 24 * EDSCALE)); // Adjust for the height of the warning icon.
  	idle = memnew(Timer);
 diff --git a/editor/gui/code_editor.h b/editor/gui/code_editor.h
-index d624099..f585878 100644
+index d624099..10ba76c 100644
 --- a/editor/gui/code_editor.h
 +++ b/editor/gui/code_editor.h
-@@ -161,7 +161,23 @@ class CodeTextEditor : public VBoxContainer {
+@@ -161,7 +161,31 @@ class CodeTextEditor : public VBoxContainer {
  	GDCLASS(CodeTextEditor, VBoxContainer);
  
  	CodeEdit *text_editor = nullptr;
@@ -958,6 +1199,14 @@ index d624099..f585878 100644
 +	Control *phone_extra_tools = nullptr;
 +	Button *phone_more_button = nullptr;
 +	Button *phone_wrap_button = nullptr;
++	Control *phone_symbol_bar = nullptr;
++	Button *phone_symbols_button = nullptr;
++	Button *phone_minimap_button = nullptr;
++	Button *phone_save_button = nullptr;
++	Button *phone_find_button = nullptr;
++	void _phone_symbols_toggled(bool p_enabled);
++	void _phone_minimap_toggled(bool p_enabled);
++	void _phone_insert_symbol(const String &p_symbol);
 +	TextEditTouchAxisLock phone_pan_lock;
 +	void _phone_show_more(bool p_show);
 +	void _phone_hide_more();
@@ -1189,7 +1438,7 @@ index 1982fda..3960493 100644
  	void _update_scroll(real_t);
  	void _update_scrollbars();
 diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
-index 0e60dde..00b6053 100644
+index 0e60dde..874b86c 100644
 --- a/editor/script/script_editor_plugin.cpp
 +++ b/editor/script/script_editor_plugin.cpp
 @@ -75,6 +75,7 @@
@@ -1401,7 +1650,15 @@ index 0e60dde..00b6053 100644
  		} break;
  #endif
  		case NOTIFICATION_APPLICATION_FOCUS_IN: {
-@@ -3824,10 +3921,29 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -2282,6 +2379,7 @@ bool ScriptEditor::edit(const Ref<Resource> &p_resource, int p_line, int p_col,
+ 	tab_container->add_child(seb);
+ 
+ 	if (TextEditorBase *teb = Object::cast_to<TextEditorBase>(seb)) {
++		teb->get_code_editor()->connect(SNAME("request_save"), callable_mp(this, &ScriptEditor::save_current_script));
+ 		if (p_grab_focus) {
+ 			teb->enable_editor();
+ 		}
+@@ -3824,10 +3922,29 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	VBoxContainer *main_container = memnew(VBoxContainer);
  	add_child(main_container);
  
@@ -1417,7 +1674,7 @@ index 0e60dde..00b6053 100644
 +		scroll->add_child(menu_hb);
 +		phone_menu_scroll = scroll;
 +		phone_compact = EditorSettings::get_singleton()->get_project_metadata("phone_editor", "compact", true);
-+		phone_menu_visible = EditorSettings::get_singleton()->get_project_metadata("phone_editor", "menu_visible", true);
++		phone_menu_visible = EditorSettings::get_singleton()->get_project_metadata("phone_editor", "menu_visible", false);
 +	} else {
 +		main_container->add_child(menu_hb);
 +	}
@@ -1433,7 +1690,7 @@ index 0e60dde..00b6053 100644
  	main_container->add_child(script_split);
  	script_split->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_split->set_drag_nested_intersections(true);
-@@ -3857,7 +3973,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3857,7 +3974,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	_sort_list_on_update = true;
  	script_list = memnew(ItemList);
  	script_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
@@ -1442,7 +1699,7 @@ index 0e60dde..00b6053 100644
  	script_list->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_list->set_theme_type_variation("ItemListSecondary");
  	script_split->set_split_offset(200 * EDSCALE);
-@@ -3875,7 +3991,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3875,7 +3992,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->set_v_size_flags(SIZE_EXPAND_FILL);
  
  	list_split->add_child(overview_vbox);
@@ -1455,7 +1712,7 @@ index 0e60dde..00b6053 100644
  	buttons_hbox = memnew(HBoxContainer);
  	overview_vbox->add_child(buttons_hbox);
  
-@@ -3901,7 +4021,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3901,7 +4022,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->add_child(members_overview);
  
  	members_overview->set_allow_reselect(true);
@@ -1464,7 +1721,7 @@ index 0e60dde..00b6053 100644
  	members_overview->set_v_size_flags(SIZE_EXPAND_FILL);
  	members_overview->set_allow_rmb_select(true);
  
-@@ -3910,9 +4030,43 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3910,9 +4031,43 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	help_overview->set_theme_type_variation("ItemListSecondary");
  	overview_vbox->add_child(help_overview);
  	help_overview->set_allow_reselect(true);
@@ -1510,7 +1767,7 @@ index 0e60dde..00b6053 100644
  	script_split->add_child(code_editor_container);
  
 diff --git a/editor/script/script_editor_plugin.h b/editor/script/script_editor_plugin.h
-index 067c3fb..bf4caee 100644
+index 067c3fb..82ee915 100644
 --- a/editor/script/script_editor_plugin.h
 +++ b/editor/script/script_editor_plugin.h
 @@ -44,6 +44,7 @@ class EditorHelpSearch;
@@ -1537,7 +1794,7 @@ index 067c3fb..bf4caee 100644
 +
  	bool restoring_layout;
 +	bool phone_compact = true;
-+	bool phone_menu_visible = true;
++	bool phone_menu_visible = false;
 +	bool phone_nav_functions = false;
 +	bool phone_nav_layout_ready = false;
 +	Button *phone_scripts_tab = nullptr;
@@ -1563,10 +1820,10 @@ index 067c3fb..bf4caee 100644
  	bool is_files_panel_toggled();
  	void apply_scripts() const;
 diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
-index 8dc98d6..6a49ff5 100644
+index 8dc98d6..fd4b288 100644
 --- a/editor/settings/editor_settings.cpp
 +++ b/editor/settings/editor_settings.cpp
-@@ -640,6 +640,12 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
+@@ -640,6 +640,13 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
  	String touch_actions_panel_hints = "Disabled:0,Embedded Panel:1,Floating Panel:2";
  	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "interface/touchscreen/touch_actions_panel", 1, touch_actions_panel_hints)
  
@@ -1574,11 +1831,24 @@ index 8dc98d6..6a49ff5 100644
 +	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_single_panel_mode", is_android_editor, "")
 +	set_restart_if_changed("interface/touchscreen/phone_single_panel_mode", true);
 +	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_RANGE, "interface/touchscreen/phone_text_pan_percent", 100, "25,200,5")
-+	set_restart_if_changed("interface/touchscreen/phone_text_pan_percent", true);
++	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_symbol_bar", false, "")
++	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_code_minimap", false, "")
 +
  	// Scene tabs
  	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
  	_initial_set("interface/scene_tabs/show_thumbnail_on_hover", true);
+diff --git a/editor/shader/shader_editor_plugin.cpp b/editor/shader/shader_editor_plugin.cpp
+index 46163b9..3dccedf 100644
+--- a/editor/shader/shader_editor_plugin.cpp
++++ b/editor/shader/shader_editor_plugin.cpp
+@@ -191,6 +191,7 @@ void ShaderEditorPlugin::edit(Object *p_object) {
+ 		text_shader_editor->connect("validation_changed", callable_mp(this, &ShaderEditorPlugin::_update_shader_list));
+ 		CodeTextEditor *cte = text_shader_editor->get_code_editor();
+ 		if (cte) {
++			cte->connect(SNAME("request_save"), callable_mp(this, &ShaderEditorPlugin::_menu_item_pressed).bind(FILE_MENU_SAVE));
+ 			cte->set_zoom_factor(text_shader_zoom_factor);
+ 			cte->connect("zoomed", callable_mp(this, &ShaderEditorPlugin::_set_text_shader_zoom_factor));
+ 			cte->connect(SceneStringName(visibility_changed), callable_mp(this, &ShaderEditorPlugin::_update_shader_editor_zoom_factor).bind(cte));
 diff --git a/editor/themes/editor_theme_manager.cpp b/editor/themes/editor_theme_manager.cpp
 index 39f60bf..40ba5d4 100644
 --- a/editor/themes/editor_theme_manager.cpp
@@ -1694,7 +1964,7 @@ index 1fd7478..095efdc 100644
  	void process_pan(Point2 p_pos, Vector2 p_delta);
  	void process_joy_event(JoypadEvent p_event);
 diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
-index fcbb102..2e7f561 100644
+index fcbb102..ade01f0 100644
 --- a/platform/android/java/editor/build.gradle
 +++ b/platform/android/java/editor/build.gradle
 @@ -60,13 +60,16 @@ ext {
@@ -1703,8 +1973,8 @@ index fcbb102..2e7f561 100644
      int libraryVersionCode = getGodotLibraryVersionCode()
 -    return (libraryVersionCode * editorBuildNumberOffset) + getEditorBuildNumber()
 +    def phoneBuild = System.getenv("GODOT_PHONE_BUILD_NUMBER")
-+    int build = phoneBuild ? Integer.parseInt(phoneBuild) : 3
-+    if (build < 3 || build > 99999) throw new GradleException("GODOT_PHONE_BUILD_NUMBER must be in 3..99999")
++    int build = phoneBuild ? Integer.parseInt(phoneBuild) : 4
++    if (build < 4 || build > 99999) throw new GradleException("GODOT_PHONE_BUILD_NUMBER must be in 4..99999")
 +    return 40702500 + build
  }
  
@@ -1712,7 +1982,7 @@ index fcbb102..2e7f561 100644
      String libraryVersionName = getGodotLibraryVersionName()
      int buildNumber = getEditorBuildNumber()
 -    return buildNumber == 0 ? libraryVersionName : libraryVersionName + ".$buildNumber"
-+    return libraryVersionName + ".phone3.4.1." + (System.getenv("GODOT_PHONE_BUILD_NUMBER") ?: "3")
++    return libraryVersionName + ".phone3.5.0." + (System.getenv("GODOT_PHONE_BUILD_NUMBER") ?: "4")
  }
  
  android {
@@ -1756,19 +2026,18 @@ index fcbb102..2e7f561 100644
  
      implementation "androidx.fragment:fragment:$versions.fragmentVersion"
 diff --git a/platform/android/java/editor/src/main/AndroidManifest.xml b/platform/android/java/editor/src/main/AndroidManifest.xml
-index e6bbada..6df0c06 100644
+index e6bbada..144ed1c 100644
 --- a/platform/android/java/editor/src/main/AndroidManifest.xml
 +++ b/platform/android/java/editor/src/main/AndroidManifest.xml
-@@ -4,7 +4,7 @@
-     android:installLocation="auto">
+@@ -5,6 +5,7 @@
  
      <queries>
--        <package android:name="org.godotengine.godot_gradle_build_environment" />
+         <package android:name="org.godotengine.godot_gradle_build_environment" />
 +        <package android:name="org.godotengine.godot_gradle_build_environment.saftest" />
      </queries>
  
      <supports-screens
-@@ -61,7 +61,7 @@
+@@ -61,7 +62,7 @@
              android:exported="false"
              android:icon="@mipmap/themed_icon"
              android:launchMode="singleInstancePerTask"
@@ -1794,18 +2063,50 @@ index fce031f..afdd8d8 100644
  
  	override fun onDestroy() {
 diff --git a/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt b/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
-index fee970b..cba6093 100644
+index fee970b..ab43575 100644
 --- a/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
 +++ b/platform/android/java/editor/src/main/java/org/godotengine/editor/buildprovider/GradleBuildEnvironmentClient.kt
-@@ -111,7 +111,7 @@ internal class GradleBuildEnvironmentClient(private val context: Context) {
+@@ -110,20 +110,31 @@ internal class GradleBuildEnvironmentClient(private val context: Context) {
+ 		}
  		connecting = true;
  
- 		val intent = Intent("org.godotengine.action.BUILD_PROVIDER").apply {
+-		val intent = Intent("org.godotengine.action.BUILD_PROVIDER").apply {
 -			setPackage("org.godotengine.godot_gradle_build_environment")
-+			setPackage("org.godotengine.godot_gradle_build_environment.saftest")
+-		}
+-		val info = context.packageManager.resolveService(intent, 0)
+-		if (info == null) {
+-			connecting = false;
+-			Log.e(TAG, "Unable to resolve service")
++		// Prefer the ordinary GABE installation, while allowing the earlier
++		// explicitly named SAF test build. Never bind to an arbitrary handler.
++		val intent = listOf(
++			"org.godotengine.godot_gradle_build_environment",
++			"org.godotengine.godot_gradle_build_environment.saftest"
++		).map { packageName ->
++			Intent("org.godotengine.action.BUILD_PROVIDER").setPackage(packageName)
++		}.firstOrNull { context.packageManager.resolveService(it, 0) != null }
++		if (intent == null) {
++			connecting = false
++			connectionCallbacks.clear()
++			Log.e(TAG, "No installed GABE build provider")
+ 			return false
  		}
- 		val info = context.packageManager.resolveService(intent, 0)
- 		if (info == null) {
+ 
+-		val result = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
++		val result = try {
++			context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
++		} catch (e: SecurityException) {
++			Log.e(TAG, "GABE service refused binding", e)
++			false
++		}
+ 		if (!result) {
+ 			Log.e(TAG, "Unable to bind to service")
+-			connecting = false;
++			connecting = false
++			connectionCallbacks.clear()
+ 		}
+ 		return result;
+ 	}
 diff --git a/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt b/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt
 index 404521b..0639462 100644
 --- a/platform/android/java/editor/src/main/java/org/godotengine/editor/embed/EmbeddedGodotGame.kt
