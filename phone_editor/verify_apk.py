@@ -45,9 +45,11 @@ if __name__ == "__main__":
     package = re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'", badging)
     if not package:
         raise ValueError("Cannot read APK package and version")
-    expected_code = 40702500 + int(os.environ.get("GODOT_PHONE_BUILD_NUMBER", "4"))
-    if package[1] != "org.godotengine.editor.v4.phonepreview31.debug" or int(package[2]) != expected_code or expected_code <= 40702503:
-        raise ValueError("APK identity or version breaks the 3.4 update path: " + package[0])
+    build_number = os.environ.get("GODOT_PHONE_BUILD_NUMBER", "4")
+    expected_code = 40702500 + int(build_number)
+    expected_name = "4.7.2.stable.phone3.5.0." + build_number
+    if package[1] != "org.godotengine.editor.v4.phonepreview31.debug" or int(package[2]) != expected_code or expected_code <= 40702503 or package[3] != expected_name:
+        raise ValueError("APK identity or version breaks the 3.4.1 update path: " + package[0])
     signature = subprocess.check_output(["java", "-jar", str(build_tools / "lib/apksigner.jar"), "verify", "--verbose", "--print-certs", str(path)], text=True)
     fingerprint = "921564d50b125fc1dfbe2209be475ed2172adf8be7f472532f212819715d3e8c"
     if "certificate SHA-256 digest: " + fingerprint not in signature:

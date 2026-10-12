@@ -700,7 +700,7 @@ index f683e13..8e739cc 100644
  
  	void new_inherited_scene() { _menu_option_confirm(SCENE_NEW_INHERITED_SCENE, false); }
 diff --git a/editor/gui/code_editor.cpp b/editor/gui/code_editor.cpp
-index aceecca..5f825d5 100644
+index aceecca..22f51f3 100644
 --- a/editor/gui/code_editor.cpp
 +++ b/editor/gui/code_editor.cpp
 @@ -29,6 +29,8 @@
@@ -726,20 +726,60 @@ index aceecca..5f825d5 100644
  #include "scene/main/timer.h"
  #include "scene/resources/font.h"
  
-@@ -865,6 +869,58 @@ FindReplaceBar::FindReplaceBar() {
+@@ -137,6 +141,11 @@ GotoLinePopup::GotoLinePopup() {
+ 
+ void FindReplaceBar::_notification(int p_what) {
+ 	switch (p_what) {
++		case NOTIFICATION_RESIZED: {
++			if (phone_find_layout) {
++				phone_find_layout->set_vertical(get_size().x < 640 * EDSCALE);
++			}
++		} break;
+ 		case EditorSettings::NOTIFICATION_EDITOR_SETTINGS_CHANGED: {
+ 			if (!EditorThemeManager::is_generated_theme_outdated()) {
+ 				break;
+@@ -628,6 +637,9 @@ void FindReplaceBar::_show_search(bool p_with_replace, bool p_show_only) {
+ }
+ 
+ void FindReplaceBar::popup_search(bool p_show_only) {
++	if (phone_replace_group) {
++		phone_replace_group->hide();
++	}
+ 	replace_text->hide();
+ 	hbc_button_replace->hide();
+ 	hbc_option_replace->hide();
+@@ -638,6 +650,9 @@ void FindReplaceBar::popup_search(bool p_show_only) {
+ }
+ 
+ void FindReplaceBar::popup_replace() {
++	if (phone_replace_group) {
++		phone_replace_group->show();
++	}
+ 	if (!replace_text->is_visible_in_tree()) {
+ 		replace_text->show();
+ 		hbc_button_replace->show();
+@@ -865,6 +880,66 @@ FindReplaceBar::FindReplaceBar() {
  	hide_button->connect(SceneStringName(pressed), callable_mp(this, &FindReplaceBar::_hide_bar));
  	hide_button->set_v_size_flags(SIZE_SHRINK_CENTER);
  	add_child(hide_button);
 +
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
 +		set_name("PhoneFindBar");
-+		VBoxContainer *stack = memnew(VBoxContainer);
++		BoxContainer *stack = memnew(BoxContainer(true));
++		phone_find_layout = stack;
 +		stack->set_h_size_flags(SIZE_EXPAND_FILL);
 +		add_child(stack);
++		VBoxContainer *search_group = memnew(VBoxContainer);
++		search_group->set_h_size_flags(SIZE_EXPAND_FILL);
++		stack->add_child(search_group);
++		VBoxContainer *replace_group = memnew(VBoxContainer);
++		replace_group->set_h_size_flags(SIZE_EXPAND_FILL);
++		stack->add_child(replace_group);
++		phone_replace_group = replace_group;
 +		HBoxContainer *search_row = memnew(HBoxContainer);
-+		stack->add_child(search_row);
++		search_group->add_child(search_row);
 +		HBoxContainer *options_row = memnew(HBoxContainer);
-+		stack->add_child(options_row);
++		search_group->add_child(options_row);
 +		auto move = [](Control *p_control, Node *p_parent) {
 +			p_control->get_parent()->remove_child(p_control);
 +			p_parent->add_child(p_control);
@@ -764,11 +804,11 @@ index aceecca..5f825d5 100644
 +		whole_words->set_text("Ab|");
 +		whole_words->set_tooltip_text(TTR("Whole Words"));
 +		whole_words->set_accessibility_name(TTR("Whole Words"));
-+		move(hbc_button_replace, stack);
++		move(hbc_button_replace, replace_group);
 +		move(replace_text, hbc_button_replace);
 +		hbc_button_replace->move_child(replace_text, 0);
 +		replace_text->set_h_size_flags(SIZE_EXPAND_FILL);
-+		move(hbc_option_replace, stack);
++		move(hbc_option_replace, replace_group);
 +		move(replace_all, hbc_option_replace);
 +		hbc_option_replace->move_child(replace_all, 0);
 +		selection_only->set_text(String::utf8("В выделении"));
@@ -785,7 +825,7 @@ index aceecca..5f825d5 100644
  }
  
  /*** CODE EDITOR ****/
-@@ -1126,13 +1182,26 @@ void CodeTextEditor::update_editor_settings() {
+@@ -1126,13 +1201,26 @@ void CodeTextEditor::update_editor_settings() {
  	text_editor->set_line_numbers_zero_padded(EDITOR_GET("text_editor/appearance/gutters/line_numbers_zero_padded"));
  
  	// Appearance: Minimap
@@ -814,7 +854,7 @@ index aceecca..5f825d5 100644
  	text_editor->set_autowrap_mode((TextServer::AutowrapMode)EDITOR_GET("text_editor/appearance/lines/autowrap_mode").operator int());
  
  	// Appearance: Whitespace
-@@ -1610,6 +1679,20 @@ void CodeTextEditor::goto_error() {
+@@ -1610,6 +1698,20 @@ void CodeTextEditor::goto_error() {
  
  void CodeTextEditor::_update_text_editor_theme() {
  	emit_signal(SNAME("load_theme_settings"));
@@ -835,7 +875,7 @@ index aceecca..5f825d5 100644
  
  	const Ref<Font> status_bar_font = get_theme_font(SNAME("status_source"), EditorStringName(EditorFonts));
  	const int status_bar_font_size = get_theme_font_size(SNAME("status_source_size"), EditorStringName(EditorFonts));
-@@ -1729,7 +1812,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
+@@ -1729,7 +1831,7 @@ void CodeTextEditor::_set_show_warnings_panel(bool p_show) {
  void CodeTextEditor::_toggle_files_pressed() {
  	ERR_FAIL_NULL(toggle_files_list);
  	toggle_files_list->set_visible(!toggle_files_list->is_visible());
@@ -844,7 +884,7 @@ index aceecca..5f825d5 100644
  	update_toggle_files_button();
  }
  
-@@ -1885,7 +1968,7 @@ void CodeTextEditor::_zoom_out() {
+@@ -1885,7 +1987,7 @@ void CodeTextEditor::_zoom_out() {
  }
  
  void CodeTextEditor::_zoom_to(float p_zoom_factor) {
@@ -853,7 +893,7 @@ index aceecca..5f825d5 100644
  		return;
  	}
  
-@@ -1917,6 +2000,7 @@ void CodeTextEditor::_show_goto_popup_request() {
+@@ -1917,6 +2019,7 @@ void CodeTextEditor::_show_goto_popup_request() {
  }
  
  void CodeTextEditor::_bind_methods() {
@@ -861,7 +901,7 @@ index aceecca..5f825d5 100644
  	ADD_SIGNAL(MethodInfo("validate_script"));
  	ADD_SIGNAL(MethodInfo("load_theme_settings"));
  	ADD_SIGNAL(MethodInfo("show_errors_panel"));
-@@ -1946,6 +2030,176 @@ void CodeTextEditor::update_toggle_files_button() {
+@@ -1946,6 +2049,176 @@ void CodeTextEditor::update_toggle_files_button() {
  	toggle_files_button->set_tooltip_text(vformat("%s (%s)", TTR("Toggle Files Panel"), ED_GET_SHORTCUT("script_editor/toggle_files_panel")->get_as_text()));
  }
  
@@ -1038,7 +1078,7 @@ index aceecca..5f825d5 100644
  CodeTextEditor::CodeTextEditor() {
  	code_complete_func = nullptr;
  	ED_SHORTCUT("script_editor/zoom_in", TTRC("Zoom In"), KeyModifierMask::CMD_OR_CTRL | Key::EQUAL);
-@@ -1963,10 +2217,143 @@ CodeTextEditor::CodeTextEditor() {
+@@ -1963,10 +2236,143 @@ CodeTextEditor::CodeTextEditor() {
  	text_editor->set_draw_line_numbers(true);
  	text_editor->set_highlight_matching_braces_enabled(true);
  	text_editor->set_auto_indent_enabled(true);
@@ -1184,10 +1224,19 @@ index aceecca..5f825d5 100644
  	status_bar->set_custom_minimum_size(Size2(0, 24 * EDSCALE)); // Adjust for the height of the warning icon.
  	idle = memnew(Timer);
 diff --git a/editor/gui/code_editor.h b/editor/gui/code_editor.h
-index d624099..10ba76c 100644
+index d624099..96cf5f4 100644
 --- a/editor/gui/code_editor.h
 +++ b/editor/gui/code_editor.h
-@@ -161,7 +161,31 @@ class CodeTextEditor : public VBoxContainer {
+@@ -88,6 +88,8 @@ class FindReplaceBar : public HBoxContainer {
+ 
+ 	HBoxContainer *hbc_button_replace = nullptr;
+ 	HBoxContainer *hbc_option_replace = nullptr;
++	BoxContainer *phone_find_layout = nullptr;
++	Control *phone_replace_group = nullptr;
+ 
+ 	CodeTextEditor *base_text_editor = nullptr;
+ 	CodeEdit *text_editor = nullptr;
+@@ -161,7 +163,31 @@ class CodeTextEditor : public VBoxContainer {
  	GDCLASS(CodeTextEditor, VBoxContainer);
  
  	CodeEdit *text_editor = nullptr;
@@ -1438,7 +1487,7 @@ index 1982fda..3960493 100644
  	void _update_scroll(real_t);
  	void _update_scrollbars();
 diff --git a/editor/script/script_editor_plugin.cpp b/editor/script/script_editor_plugin.cpp
-index 0e60dde..874b86c 100644
+index 0e60dde..0133867 100644
 --- a/editor/script/script_editor_plugin.cpp
 +++ b/editor/script/script_editor_plugin.cpp
 @@ -75,6 +75,7 @@
@@ -1658,7 +1707,21 @@ index 0e60dde..874b86c 100644
  		if (p_grab_focus) {
  			teb->enable_editor();
  		}
-@@ -3824,10 +3922,29 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3602,6 +3700,13 @@ void ScriptEditor::set_live_auto_reload_running_scripts(bool p_enabled) {
+ }
+ 
+ void ScriptEditor::_calculate_script_name_button_size() {
++	if (phone_script_title) {
++		// Keep file identity and the native unsaved marker visible in compact
++		// mode, without retaining the entire desktop menu row.
++		phone_script_title->set_text(script_name_button->get_text());
++		phone_script_title->set_tooltip_text(script_name_button->get_text());
++		return;
++	}
+ 	Ref<Font> font = script_name_button->get_theme_font(SceneStringName(font), SNAME("Button"));
+ 	HorizontalAlignment alignment = script_name_button->get_text_alignment();
+ 	int font_size = script_name_button->get_theme_font_size(SceneStringName(font_size), SNAME("Button"));
+@@ -3824,10 +3929,34 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	VBoxContainer *main_container = memnew(VBoxContainer);
  	add_child(main_container);
  
@@ -1675,12 +1738,17 @@ index 0e60dde..874b86c 100644
 +		phone_menu_scroll = scroll;
 +		phone_compact = EditorSettings::get_singleton()->get_project_metadata("phone_editor", "compact", true);
 +		phone_menu_visible = EditorSettings::get_singleton()->get_project_metadata("phone_editor", "menu_visible", false);
++		phone_script_title = memnew(Label);
++		phone_script_title->set_name("PhoneScriptTitle");
++		phone_script_title->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
++		phone_script_title->set_h_size_flags(SIZE_EXPAND_FILL);
++		main_container->add_child(phone_script_title);
 +	} else {
 +		main_container->add_child(menu_hb);
 +	}
++
  
 -	script_split = memnew(HSplitContainer);
-+
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
 +		script_split = memnew(SplitContainer);
 +		script_split->set_name("PhoneScriptSplit");
@@ -1690,7 +1758,7 @@ index 0e60dde..874b86c 100644
  	main_container->add_child(script_split);
  	script_split->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_split->set_drag_nested_intersections(true);
-@@ -3857,7 +3974,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3857,7 +3986,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	_sort_list_on_update = true;
  	script_list = memnew(ItemList);
  	script_list->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
@@ -1699,7 +1767,7 @@ index 0e60dde..874b86c 100644
  	script_list->set_v_size_flags(SIZE_EXPAND_FILL);
  	script_list->set_theme_type_variation("ItemListSecondary");
  	script_split->set_split_offset(200 * EDSCALE);
-@@ -3875,7 +3992,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3875,7 +4004,11 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->set_v_size_flags(SIZE_EXPAND_FILL);
  
  	list_split->add_child(overview_vbox);
@@ -1712,7 +1780,7 @@ index 0e60dde..874b86c 100644
  	buttons_hbox = memnew(HBoxContainer);
  	overview_vbox->add_child(buttons_hbox);
  
-@@ -3901,7 +4022,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3901,7 +4034,7 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	overview_vbox->add_child(members_overview);
  
  	members_overview->set_allow_reselect(true);
@@ -1721,7 +1789,7 @@ index 0e60dde..874b86c 100644
  	members_overview->set_v_size_flags(SIZE_EXPAND_FILL);
  	members_overview->set_allow_rmb_select(true);
  
-@@ -3910,9 +4031,43 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+@@ -3910,9 +4043,43 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
  	help_overview->set_theme_type_variation("ItemListSecondary");
  	overview_vbox->add_child(help_overview);
  	help_overview->set_allow_reselect(true);
@@ -1766,8 +1834,18 @@ index 0e60dde..874b86c 100644
  	VBoxContainer *code_editor_container = memnew(VBoxContainer);
  	script_split->add_child(code_editor_container);
  
+@@ -4034,6 +4201,9 @@ ScriptEditor::ScriptEditor(WindowWrapper *p_wrapper) {
+ 	script_name_button_hbox->add_theme_constant_override("separation", 0);
+ 	script_name_button_hbox->connect(SceneStringName(item_rect_changed), callable_mp(this, &ScriptEditor::_calculate_script_name_button_ratio));
+ 	menu_hb->add_child(script_name_button_hbox);
++	if (phone_script_title) {
++		script_name_button_hbox->hide();
++	}
+ 
+ 	script_name_button_left_spacer = memnew(Control);
+ 	script_name_button_left_spacer->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 diff --git a/editor/script/script_editor_plugin.h b/editor/script/script_editor_plugin.h
-index 067c3fb..82ee915 100644
+index 067c3fb..4472afa 100644
 --- a/editor/script/script_editor_plugin.h
 +++ b/editor/script/script_editor_plugin.h
 @@ -44,6 +44,7 @@ class EditorHelpSearch;
@@ -1787,7 +1865,7 @@ index 067c3fb..82ee915 100644
  	ItemList *members_overview = nullptr;
  	LineEdit *filter_scripts = nullptr;
  	LineEdit *filter_methods = nullptr;
-@@ -239,7 +240,23 @@ class ScriptEditor : public PanelContainer {
+@@ -239,7 +240,24 @@ class ScriptEditor : public PanelContainer {
  	Tree *disk_changed_list = nullptr;
  	ConfirmationDialog *disk_changed = nullptr;
  
@@ -1805,13 +1883,14 @@ index 067c3fb..82ee915 100644
 +	void _phone_sync_navigator();
 +	void _phone_adjust_caret_after_resize();
 +	Control *phone_menu_scroll = nullptr;
++	Label *phone_script_title = nullptr;
 +	HashMap<ObjectID, bool> phone_hidden_chrome;
 +	void update_phone_chrome();
 +	void _update_phone_script_list_layout();
  
  	void _resave_scripts(const String &p_str);
  
-@@ -401,6 +418,7 @@ protected:
+@@ -401,6 +419,7 @@ protected:
  public:
  	static ScriptEditor *get_singleton() { return script_editor; }
  
@@ -1820,7 +1899,7 @@ index 067c3fb..82ee915 100644
  	bool is_files_panel_toggled();
  	void apply_scripts() const;
 diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
-index 8dc98d6..fd4b288 100644
+index 8dc98d6..bbe8ff2 100644
 --- a/editor/settings/editor_settings.cpp
 +++ b/editor/settings/editor_settings.cpp
 @@ -640,6 +640,13 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
@@ -1837,6 +1916,29 @@ index 8dc98d6..fd4b288 100644
  	// Scene tabs
  	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
  	_initial_set("interface/scene_tabs/show_thumbnail_on_hover", true);
+@@ -1976,6 +1983,22 @@ String EditorSettings::get_editor_layouts_config() const {
+ }
+ 
+ float EditorSettings::get_auto_display_scale() {
++#ifdef ANDROID_ENABLED
++	// The Android display server caps its scale to fit the desktop-sized
++	// 800x600 UI. A single-panel phone editor no longer needs that cap.
++	// Keep the project manager and XR layout on their existing scale policy.
++	const bool phone_mode = !singleton || !singleton->has_setting("interface/touchscreen/phone_single_panel_mode") || (bool)singleton->get("interface/touchscreen/phone_single_panel_mode");
++	if (phone_mode && !Engine::get_singleton()->is_project_manager_hint() && !OS::get_singleton()->has_feature("xr_editor")) {
++		DisplayServer *display = DisplayServer::get_singleton();
++		const Size2i screen_size = display->screen_get_size();
++		if (screen_size.x > 0 && screen_size.y > 0) {
++			const float density = MAX(0.5f, display->screen_get_dpi() / 160.0f);
++			// Use the short edge so rotating the phone does not change the scale.
++			const float fit = MIN(screen_size.x, screen_size.y) / 360.0f;
++			return MIN(density, MAX(0.5f, fit));
++		}
++	}
++#endif
+ #ifdef LINUXBSD_ENABLED
+ 	if (DisplayServer::get_singleton()->get_name() == "Wayland") {
+ 		float main_window_scale = DisplayServer::get_singleton()->screen_get_scale(DisplayServerEnums::SCREEN_OF_MAIN_WINDOW);
 diff --git a/editor/shader/shader_editor_plugin.cpp b/editor/shader/shader_editor_plugin.cpp
 index 46163b9..3dccedf 100644
 --- a/editor/shader/shader_editor_plugin.cpp
@@ -1964,7 +2066,7 @@ index 1fd7478..095efdc 100644
  	void process_pan(Point2 p_pos, Vector2 p_delta);
  	void process_joy_event(JoypadEvent p_event);
 diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
-index fcbb102..ade01f0 100644
+index fcbb102..19df17b 100644
 --- a/platform/android/java/editor/build.gradle
 +++ b/platform/android/java/editor/build.gradle
 @@ -60,13 +60,16 @@ ext {
@@ -2017,6 +2119,15 @@ index fcbb102..ade01f0 100644
          release {
              storeFile getGodotKeystoreFile()
              storePassword getGodotSigningPassword()
+@@ -133,7 +142,7 @@ android {
+     buildTypes {
+         debug {
+             applicationIdSuffix ".debug"
+-            manifestPlaceholders += [editorBuildSuffix: " (debug)"]
++            manifestPlaceholders += [editorBuildSuffix: ""]
+             signingConfig signingConfigs.debug
+         }
+ 
 @@ -199,6 +208,7 @@ android {
  }
  

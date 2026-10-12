@@ -960,6 +960,8 @@ func _test_phone_ux(base: Control) -> void:
 	var scale: float = settings.get_setting("interface/editor/appearance/custom_display_scale")
 	var original := code.text
 	var original_disk := FileAccess.get_file_as_string("res://phone_text_fixture.gd")
+	var title := base.find_child("PhoneScriptTitle", true, false) as Label
+	_expect(title != null and title.is_visible_in_tree() and title.text.contains("phone_text_fixture"), "Current file identity is missing in compact code mode")
 	var original_emulation := Input.emulate_mouse_from_touch
 	Input.emulate_mouse_from_touch = true
 	var primary := editor.find_child("PhoneCodePrimary", true, false) as Control

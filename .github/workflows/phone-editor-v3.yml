@@ -35,7 +35,7 @@ jobs:
           ref: ed1daf0bf001b61586d9930840f2f1394092c079
           path: godot
           persist-credentials: false
-      - name: Validate and apply candidate
+      - name: Validate and apply phone source
         shell: bash
         run: |
           set -euo pipefail
