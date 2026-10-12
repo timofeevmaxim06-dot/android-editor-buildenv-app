@@ -960,8 +960,9 @@ func _test_phone_ux(base: Control) -> void:
 	var scale: float = settings.get_setting("interface/editor/appearance/custom_display_scale")
 	var original := code.text
 	var original_disk := FileAccess.get_file_as_string("res://phone_text_fixture.gd")
-	var title := base.find_child("PhoneScriptTitle", true, false) as Label
+	var title := editor.find_child("PhoneScriptTitle", true, false) as Label
 	_expect(title != null and title.is_visible_in_tree() and title.text.contains("phone_text_fixture"), "Current file identity is missing in compact code mode")
+	_inside_window(title, "current file caption")
 	var original_emulation := Input.emulate_mouse_from_touch
 	Input.emulate_mouse_from_touch = true
 	var primary := editor.find_child("PhoneCodePrimary", true, false) as Control
@@ -1018,6 +1019,8 @@ func _test_phone_ux(base: Control) -> void:
 	code.set_caret_line(0)
 	code.set_caret_column(0)
 	await _press_text_tool(editor, "PhoneFind", true)
+	for panel in base.find_children("*", "EditorBottomPanel", true, false):
+		_expect(panel.current_tab == -1, "Search did not release the unpinned bottom panel")
 	var search := base.find_child("PhoneFindText", true, false) as LineEdit
 	var bar := base.find_child("PhoneFindBar", true, false) as Control
 	_expect(search != null and search.is_visible_in_tree() and search.has_focus(), "Find action did not focus search field")
@@ -1040,6 +1043,8 @@ func _test_phone_ux(base: Control) -> void:
 	_expect(not bar.is_visible_in_tree() and code.has_focus(), "Closing find did not restore code focus")
 
 	code.text = original_disk + "\n# phone_save_marker\n"
+	await _settle(10)
+	_expect(title.text.contains("(*)"), "Current file caption lost its unsaved marker")
 	await _press_text_tool(editor, "PhoneSave", true)
 	_expect(FileAccess.get_file_as_string("res://phone_text_fixture.gd").contains("# phone_save_marker"), "Save button did not write the current script")
 	code.text = original_disk

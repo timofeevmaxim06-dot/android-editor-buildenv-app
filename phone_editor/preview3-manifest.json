@@ -1,6 +1,6 @@
 {
   "godot_commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
-  "patch_sha256": "f938cb9193cacbc3ea16be81fd1ed3e1a345a635bf240a56628257773bc48d52",
+  "patch_sha256": "9e0785ba9fcfe84e902c9e60242254b019820aeac9fd138a58656ce45a04b9ac",
   "files": {
     "doc/classes/TextEdit.xml": {
       "before": "b5a3fd2f65899aa7c32074ffa4f4947a4c677f5aa147790b5115c1a8c3ea471c",
@@ -28,7 +28,7 @@
     },
     "editor/editor_node.cpp": {
       "before": "ca8e106bffb9501c82cacc196075dfa968a7b9a44130bb84af357202215e3ca6",
-      "after": "fab6be1ac754c8a82cfab248f58c992d0f1702c01749049453e4ebf3b893f7b8"
+      "after": "681e1fa993942e3ebf59f8e8aa2e9231a20d1f5221266ad35194e6080a286eaa"
     },
     "editor/editor_node.h": {
       "before": "ed18ed39b5f1f036128cc7e7fa6a79056cddbbc6a09cb7dea79a9e61df68a1d6",
@@ -36,11 +36,11 @@
     },
     "editor/gui/code_editor.cpp": {
       "before": "8a0a3039df9017c04580ab370224ec12ddc7db7849e1b922e82e7189fd9d5a68",
-      "after": "28289b973fa462e43b3aa40a3df8dc63f42ba949c42cf9f5b53f5556112378c8"
+      "after": "06e7e1ed776c57b8da91d4f613a0b8fe5ce03fcaba76e26df1dde3639bd86081"
     },
     "editor/gui/code_editor.h": {
       "before": "34d5bedbe1867698285c39e324c9e8468f844fbdbe3dec22fffd591308275ff5",
-      "after": "4ff24e92f01ee5c470b4189299c844e64d89c36eeffe06f3284dd6b91149acd9"
+      "after": "9d70595b58ee0be30465fc8e64764e7b35365fd40d3a7e208148b9a455fb4b7f"
     },
     "editor/gui/create_dialog.cpp": {
       "before": "b4174360394a84086042c081c046f4d3d9a433b89c130e422abd7f385c9d0ebf",
@@ -64,11 +64,11 @@
     },
     "editor/script/script_editor_plugin.cpp": {
       "before": "18e0bac3f5fa7c2fe8117907af86282b92855d283ae6ab79b6a0587a87560947",
-      "after": "755d71da393840005cf744ecf2bf725f49637610a7f3e10d89b4811af18cef4b"
+      "after": "9f264baeefb3455317975d8a52bd67841dfddc9f3123cafea41c8baf48920cce"
     },
     "editor/script/script_editor_plugin.h": {
       "before": "3d21d4d18c7378937d0e87b24bd14f5b919ab8a6fd66d3776874c0558c1cf1bb",
-      "after": "1afa7dbce29aa51342c44b1f5af10cc2d920fde771e83575995b2d4ea3db2cfa"
+      "after": "5afedc1ddc3349a58706e08049e59a9c03c0f176c9147e6cb80ed76657a9fc95"
     },
     "editor/settings/editor_settings.cpp": {
       "before": "a9b1c5ff8ff60353f8e3803218fe064f097c573d36e82113b94e347fe8f44906",
