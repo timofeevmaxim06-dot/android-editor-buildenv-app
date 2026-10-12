@@ -21,7 +21,7 @@ sha = lambda data: hashlib.sha256(data).hexdigest()
 manifest['patch_sha256'] = sha(payload)
 manifest['files'] = {name: {'before': sha(subprocess.check_output(['git', 'show', 'HEAD:' + name], cwd=root)),
                            'after': sha((root / name).read_bytes())} for name in names}
-manifest['preview'] = '3.5.0'
+manifest['preview'] = '3.6.0'
 manifest['accepted_recipe_base'] = '404f5bb5b0e8cc424f4974a8f49e12d3dc2fa1de'
 (here / 'preview3.patch').write_bytes(payload)
 (here / 'preview3-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

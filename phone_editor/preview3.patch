@@ -39,7 +39,7 @@ index a469a50..c5d5c0f 100644
  	content->set_selection_enabled(p_allow_selection);
  	content->set_context_menu_enabled(p_allow_selection);
 diff --git a/editor/docks/editor_dock_manager.cpp b/editor/docks/editor_dock_manager.cpp
-index 50b991a..d16a38b 100644
+index 50b991a..8dd26d7 100644
 --- a/editor/docks/editor_dock_manager.cpp
 +++ b/editor/docks/editor_dock_manager.cpp
 @@ -29,10 +29,14 @@
@@ -65,7 +65,7 @@ index 50b991a..d16a38b 100644
  #include "scene/gui/popup_menu.h"
  #include "scene/gui/split_container.h"
  #include "scene/gui/tab_container.h"
-@@ -195,7 +200,102 @@ void EditorDockManager::_update_layout() {
+@@ -195,7 +200,105 @@ void EditorDockManager::_update_layout() {
  	EditorNode::get_singleton()->save_editor_layout_delayed();
  }
  
@@ -110,10 +110,13 @@ index 50b991a..d16a38b 100644
 +	menu->add_icon_item(phone_sections->get_editor_theme_icon(SNAME("Save")), String::utf8("Сохранить сцены и скрипты"), 103);
 +	menu->add_item(TTR("Editor Settings..."), 104);
 +	menu->add_item(TTR("Export..."), 105);
++	menu->add_separator();
++	menu->add_check_item(String::utf8("Панель сочетаний клавиш"), 106);
++	menu->set_item_checked(menu->get_item_index(106), EDITOR_GET("interface/touchscreen/phone_show_shortcuts"));
 +}
 +
 +void EditorDockManager::_phone_section_selected(int p_id) {
-+	if (p_id >= 100 && p_id <= 105) {
++	if (p_id >= 100 && p_id <= 106) {
 +		EditorNode::get_singleton()->execute_phone_action(p_id - 100);
 +		return;
 +	}
@@ -168,7 +171,7 @@ index 50b991a..d16a38b 100644
  	docks_menu->clear();
  	docks_menu->reset_size();
  
-@@ -324,10 +424,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
+@@ -324,10 +427,57 @@ void EditorDockManager::_restore_dock_to_saved_window(EditorDock *p_dock, const
  			p_window_dump.get("window_screen_rect", Rect2i()));
  }
  
@@ -226,7 +229,7 @@ index 50b991a..d16a38b 100644
  	Node *parent = p_dock->get_parent();
  	if (parent == p_target) {
  		if (parent && p_tab_index >= 0) {
-@@ -701,11 +848,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -701,11 +851,16 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  	}
  
  	DockTabContainer *tab_container = p_dock->get_parent_container();
@@ -244,7 +247,7 @@ index 50b991a..d16a38b 100644
  		tab_container->get_tab_bar()->grab_focus();
  	}
  
-@@ -713,6 +865,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
+@@ -713,6 +868,7 @@ void EditorDockManager::_make_dock_visible(EditorDock *p_dock, bool p_grab_focus
  		int tab_index = tab_container->get_tab_idx_from_control(p_dock);
  		tab_container->set_current_tab(tab_index);
  	}
@@ -252,7 +255,7 @@ index 50b991a..d16a38b 100644
  }
  
  void EditorDockManager::focus_dock(EditorDock *p_dock) {
-@@ -737,6 +890,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
+@@ -737,6 +893,18 @@ void EditorDockManager::add_dock(EditorDock *p_dock) {
  
  	p_dock->dock_slot_index = p_dock->default_slot;
  	all_docks.push_back(p_dock);
@@ -271,7 +274,7 @@ index 50b991a..d16a38b 100644
  	p_dock->connect("_tab_style_changed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  	p_dock->connect("renamed", callable_mp(this, &EditorDockManager::_queue_update_tab_style).bind(p_dock));
  
-@@ -755,6 +920,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
+@@ -755,6 +923,10 @@ void EditorDockManager::remove_dock(EditorDock *p_dock) {
  
  	_move_dock(p_dock, nullptr);
  
@@ -426,7 +429,7 @@ index 78ec499..db38de4 100644
  	bool is_button_enabled(int p_index) const;
  
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
-index 5bc4649..712f49d 100644
+index 5bc4649..ba1f341 100644
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
 @@ -30,6 +30,9 @@
@@ -449,7 +452,16 @@ index 5bc4649..712f49d 100644
  
  #include "modules/modules_enabled.gen.h" // For gdscript, mono.
  
-@@ -2062,6 +2063,31 @@ void EditorNode::clear_node_reference(Ref<Resource> p_res) {
+@@ -1171,7 +1172,7 @@ void EditorNode::_notification(int p_what) {
+ 			}
+ #endif
+ #ifdef ANDROID_ENABLED
+-			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel")) {
++			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel") || EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/phone_show_shortcuts")) {
+ 				_touch_actions_panel_mode_changed();
+ 			}
+ #endif
+@@ -2062,6 +2063,36 @@ void EditorNode::clear_node_reference(Ref<Resource> p_res) {
  	}
  }
  
@@ -475,21 +487,47 @@ index 5bc4649..712f49d 100644
 +		} break;
 +		case 4: _menu_option(EDITOR_OPEN_SETTINGS); break;
 +		case 5: _menu_option(PROJECT_EXPORT); break;
++		case 6: {
++			const bool show = !(bool)EDITOR_GET("interface/touchscreen/phone_show_shortcuts");
++			EditorSettings::get_singleton()->set("interface/touchscreen/phone_show_shortcuts", show);
++			EditorSettings::get_singleton()->save();
++		} break;
 +	}
 +}
 +
  void EditorNode::_menu_option(int p_option) {
  	_menu_option_confirm(p_option, false);
  }
-@@ -8292,7 +8318,6 @@ void EditorNode::_bottom_panel_resized() {
+@@ -8236,7 +8267,14 @@ void EditorNode::_update_main_menu_type() {
+ 	// Create new menu.
+ 	if (new_menu_type == MENU_TYPE_COMPACT) {
+ 		main_menu_button = memnew(MenuButton);
+-		main_menu_button->set_text(TTRC("Main Menu"));
++		if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++			main_menu_button->set_name("PhoneMainMenu");
++			main_menu_button->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
++			main_menu_button->set_tooltip_text(TTR("Main Menu"));
++			main_menu_button->set_accessibility_name(TTR("Main Menu"));
++		} else {
++			main_menu_button->set_text(TTRC("Main Menu"));
++		}
+ 		main_menu_button->set_theme_type_variation("MainScreenButton");
+ 		main_menu_button->set_focus_mode(Control::FOCUS_NONE);
+ 		if (is_inside_tree()) {
+@@ -8292,9 +8330,11 @@ void EditorNode::_bottom_panel_resized() {
  	bottom_panel->set_bottom_panel_offset(center_split->get_split_offset());
  }
  
 -#ifdef ANDROID_ENABLED
  void EditorNode::_touch_actions_panel_mode_changed() {
  	int panel_mode = EDITOR_GET("interface/touchscreen/touch_actions_panel");
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") && !(bool)EDITOR_GET("interface/touchscreen/phone_show_shortcuts")) {
++		panel_mode = 0;
++	}
  	switch (panel_mode) {
-@@ -8318,7 +8343,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
+ 		case 1:
+ 			if (touch_actions_panel != nullptr) {
+@@ -8318,7 +8358,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
  			break;
  	}
  }
@@ -497,7 +535,7 @@ index 5bc4649..712f49d 100644
  
  #ifdef MACOS_ENABLED
  extern "C" GameViewPluginBase *get_game_view_plugin();
-@@ -8479,7 +8503,13 @@ EditorNode::EditorNode() {
+@@ -8479,7 +8518,13 @@ EditorNode::EditorNode() {
  	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
  	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
  	if (w) {
@@ -512,7 +550,7 @@ index 5bc4649..712f49d 100644
  		w->set_min_size(minimum_size); // Calling it this early doesn't sync the property with DS.
  		DisplayServer::get_singleton()->window_set_min_size(minimum_size);
  	}
-@@ -8672,12 +8702,28 @@ EditorNode::EditorNode() {
+@@ -8672,12 +8717,28 @@ EditorNode::EditorNode() {
  
  	main_vbox = memnew(VBoxContainer);
  
@@ -532,7 +570,7 @@ index 5bc4649..712f49d 100644
 +		ScrollContainer *phone_top_scroll = memnew(ScrollContainer);
 +		phone_top_scroll->set_name("PhoneTopBarScroll");
 +		phone_top_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-+		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_SHOW_NEVER);
 +		phone_top_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
 +		base_vbox->add_child(phone_top_scroll);
 +		phone_top_scroll->add_child(title_bar);
@@ -542,7 +580,7 @@ index 5bc4649..712f49d 100644
  
  	main_hbox = memnew(HBoxContainer);
  	main_hbox->add_child(main_vbox);
-@@ -8688,12 +8734,25 @@ EditorNode::EditorNode() {
+@@ -8688,12 +8749,25 @@ EditorNode::EditorNode() {
  	_touch_actions_panel_mode_changed();
  
  	gui_base->add_child(base_vbox);
@@ -559,7 +597,7 @@ index 5bc4649..712f49d 100644
 +		ScrollContainer *phone_top_scroll = memnew(ScrollContainer);
 +		phone_top_scroll->set_name("PhoneTopBarScroll");
 +		phone_top_scroll->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-+		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
++		phone_top_scroll->set_horizontal_scroll_mode(ScrollContainer::SCROLL_MODE_SHOW_NEVER);
 +		phone_top_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_DISABLED);
 +		main_vbox->add_child(phone_top_scroll);
 +		phone_top_scroll->add_child(title_bar);
@@ -571,7 +609,7 @@ index 5bc4649..712f49d 100644
  
  	DockSplitContainer *main_vsplit = memnew(DockSplitContainer);
  	main_vsplit->set_name("DockVSplitMain");
-@@ -8711,6 +8770,7 @@ EditorNode::EditorNode() {
+@@ -8711,6 +8785,7 @@ EditorNode::EditorNode() {
  	left_l_vsplit->set_vertical(true);
  	main_hsplit->add_child(left_l_vsplit);
  
@@ -579,7 +617,7 @@ index 5bc4649..712f49d 100644
  	LocalVector<DockTabContainer *> dock_slots;
  	{
  		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
-@@ -8864,6 +8924,60 @@ EditorNode::EditorNode() {
+@@ -8864,6 +8939,60 @@ EditorNode::EditorNode() {
  	srt->add_child(editor_main_screen);
  	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
  
@@ -640,7 +678,7 @@ index 5bc4649..712f49d 100644
  	scene_root = memnew(SubViewport);
  	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
  	scene_root->set_translation_domain(StringName());
-@@ -9076,8 +9190,13 @@ EditorNode::EditorNode() {
+@@ -9076,8 +9205,14 @@ EditorNode::EditorNode() {
  	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
  	main_editor_button_hb->set_name("EditorMainScreenButtons");
  	editor_main_screen->set_button_container(main_editor_button_hb);
@@ -649,6 +687,7 @@ index 5bc4649..712f49d 100644
 +	if (phone_navigation) {
 +		main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_PASS);
 +		phone_navigation->add_child(main_editor_button_hb);
++		phone_navigation->move_child(main_editor_button_hb, 0);
 +	} else {
 +		title_bar->add_child(main_editor_button_hb);
 +		title_bar->set_center_control(main_editor_button_hb);
@@ -656,7 +695,7 @@ index 5bc4649..712f49d 100644
  
  	// Spacer to center 2D / 3D / Script buttons.
  	right_spacer = memnew(Control);
-@@ -9190,6 +9309,7 @@ EditorNode::EditorNode() {
+@@ -9190,6 +9325,7 @@ EditorNode::EditorNode() {
  	history_dock = memnew(HistoryDock);
  	editor_dock_manager->add_dock(history_dock);
  
@@ -1381,6 +1420,21 @@ index 844fe17..a234bdc 100644
  	register_text_enter(search_box);
  	set_hide_on_ok(false);
  	set_clamp_to_embedder(true);
+diff --git a/editor/gui/editor_bottom_panel.cpp b/editor/gui/editor_bottom_panel.cpp
+index 8569fcf..640dcb4 100644
+--- a/editor/gui/editor_bottom_panel.cpp
++++ b/editor/gui/editor_bottom_panel.cpp
+@@ -315,6 +315,10 @@ EditorBottomPanel::EditorBottomPanel() :
+ 	version_btn->set_self_modulate(Color(1, 1, 1, 0.65));
+ 	version_btn->set_v_size_flags(Control::SIZE_SHRINK_CENTER);
+ 	bottom_hbox->add_child(version_btn);
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		// Version remains in Help > About; status space belongs to output and errors.
++		version_btn->hide();
++	}
+ 
+ 	// Add a dummy control node for horizontal spacing.
+ 	Control *h_spacer = memnew(Control);
 diff --git a/editor/gui/touch_actions_panel.cpp b/editor/gui/touch_actions_panel.cpp
 index a2017eb..e5b48fe 100644
 --- a/editor/gui/touch_actions_panel.cpp
@@ -1414,17 +1468,59 @@ index a2017eb..e5b48fe 100644
  	if (is_floating) {
  		drag_handle = memnew(TextureRect);
 diff --git a/editor/scene/3d/node_3d_editor_plugin.cpp b/editor/scene/3d/node_3d_editor_plugin.cpp
-index 2cdd50b..f560cf2 100644
+index 2cdd50b..7d6b52f 100644
 --- a/editor/scene/3d/node_3d_editor_plugin.cpp
 +++ b/editor/scene/3d/node_3d_editor_plugin.cpp
-@@ -10489,7 +10489,13 @@ Node3DEditor::Node3DEditor() {
+@@ -30,6 +30,8 @@
+ 
+ #include "node_3d_editor_plugin.h"
+ 
++#include "scene/gui/popup.h"
++
+ #include "core/config/project_settings.h"
+ #include "core/input/input.h"
+ #include "core/input/input_map.h"
+@@ -176,8 +178,9 @@ void ViewportNavigationControl::_draw() {
+ 
+ 	Vector2 circle_pos = focused ? center.move_toward(focused_pos, radius) : center;
+ 
+-	draw_circle(circle_pos, AXIS_CIRCLE_RADIUS, c);
+-	draw_circle(circle_pos, AXIS_CIRCLE_RADIUS * 0.8, c.darkened(0.4));
++	const float knob_radius = MIN(AXIS_CIRCLE_RADIUS, radius * 0.35f);
++	draw_circle(circle_pos, knob_radius, c);
++	draw_circle(circle_pos, knob_radius * 0.8, c.darkened(0.4));
+ }
+ 
+ void ViewportNavigationControl::_process_click(int p_index, Vector2 p_position, bool p_pressed) {
+@@ -7030,9 +7033,10 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
+ 	top_right_vbox->set_anchors_and_offsets_preset(PRESET_TOP_RIGHT, PRESET_MODE_MINSIZE, 10.0 * EDSCALE);
+ 	top_right_vbox->set_h_grow_direction(GROW_DIRECTION_BEGIN);
+ 
+-	const int navigation_control_size = 150;
++	const int navigation_control_size = (bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode") ? 72 : 150;
+ 
+ 	position_control = memnew(ViewportNavigationControl);
++	position_control->set_name("PhoneMoveJoystick");
+ 	position_control->set_navigation_mode(View3DController::NAV_MODE_MOVE);
+ 	position_control->set_custom_minimum_size(Size2(navigation_control_size, navigation_control_size) * EDSCALE);
+ 	position_control->set_h_size_flags(SIZE_SHRINK_END);
+@@ -7044,6 +7048,7 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
+ 	surface->add_child(position_control);
+ 
+ 	look_control = memnew(ViewportNavigationControl);
++	look_control->set_name("PhoneLookJoystick");
+ 	look_control->set_navigation_mode(View3DController::NAV_MODE_LOOK);
+ 	look_control->set_custom_minimum_size(Size2(navigation_control_size, navigation_control_size) * EDSCALE);
+ 	look_control->set_h_size_flags(SIZE_SHRINK_END);
+@@ -10489,7 +10494,14 @@ Node3DEditor::Node3DEditor() {
  	toolbar_margin->add_child(main_flow);
  
  	// Main toolbars.
 -	HBoxContainer *main_menu_hbox = memnew(HBoxContainer);
 +	Container *main_menu_hbox = nullptr;
 +	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
-+		main_menu_hbox = memnew(HFlowContainer);
++		main_menu_hbox = memnew(HBoxContainer);
++		main_menu_hbox->set_name("Phone3DPrimary");
 +		main_menu_hbox->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 +	} else {
 +		main_menu_hbox = memnew(HBoxContainer);
@@ -1432,6 +1528,43 @@ index 2cdd50b..f560cf2 100644
  	main_flow->add_child(main_menu_hbox);
  
  	String sct;
+@@ -10745,6 +10757,36 @@ Node3DEditor::Node3DEditor() {
+ 
+ 	main_menu_hbox->add_child(memnew(VSeparator));
+ 
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		// Keep the four manipulation modes in one row. Preserve native controls,
++		// shortcuts and state in an on-demand panel rather than duplicate actions.
++		PopupPanel *tools_popup = memnew(PopupPanel);
++		tools_popup->set_name("Phone3DToolsPopup");
++		add_child(tools_popup);
++		HFlowContainer *secondary = memnew(HFlowContainer);
++		tools_popup->add_child(secondary);
++		while (main_menu_hbox->get_child_count() > 4) {
++			Node *child = main_menu_hbox->get_child(4);
++			main_menu_hbox->remove_child(child);
++			secondary->add_child(child);
++			if (Button *button = Object::cast_to<Button>(child)) {
++				button->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
++			}
++		}
++		for (int i = 0; i < 4; i++) {
++			Object::cast_to<Control>(main_menu_hbox->get_child(i))->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
++		}
++		Button *more = memnew(Button);
++		more->set_name("Phone3DMore");
++		more->set_theme_type_variation(SceneStringName(FlatButton));
++		more->set_button_icon(EditorNode::get_singleton()->get_editor_theme()->get_icon(SNAME("GuiTabMenu"), EditorStringName(EditorIcons)));
++		more->set_tooltip_text(TTR("Tools"));
++		more->set_accessibility_name(TTR("Tools"));
++		more->set_custom_minimum_size(Size2(48, 48) * EDSCALE);
++		more->connect(SceneStringName(pressed), callable_mp((Window *)tools_popup, &Window::popup_centered_clamped).bind(Size2i(300, 240) * EDSCALE, 0.9f));
++		main_menu_hbox->add_child(more);
++	}
++
+ 	context_toolbar_panel = memnew(PanelContainer);
+ 	context_toolbar_hbox = memnew(HBoxContainer);
+ 	context_toolbar_panel->add_child(context_toolbar_hbox);
 diff --git a/editor/scene/canvas_item_editor_plugin.cpp b/editor/scene/canvas_item_editor_plugin.cpp
 index c939e3a..3177530 100644
 --- a/editor/scene/canvas_item_editor_plugin.cpp
@@ -1956,10 +2089,10 @@ index 067c3fb..82ee915 100644
  	bool is_files_panel_toggled();
  	void apply_scripts() const;
 diff --git a/editor/settings/editor_settings.cpp b/editor/settings/editor_settings.cpp
-index 8dc98d6..9f17964 100644
+index 8dc98d6..71d9d6b 100644
 --- a/editor/settings/editor_settings.cpp
 +++ b/editor/settings/editor_settings.cpp
-@@ -640,6 +640,13 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
+@@ -640,6 +640,14 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
  	String touch_actions_panel_hints = "Disabled:0,Embedded Panel:1,Floating Panel:2";
  	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_ENUM, "interface/touchscreen/touch_actions_panel", 1, touch_actions_panel_hints)
  
@@ -1967,13 +2100,14 @@ index 8dc98d6..9f17964 100644
 +	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_single_panel_mode", is_android_editor, "")
 +	set_restart_if_changed("interface/touchscreen/phone_single_panel_mode", true);
 +	EDITOR_SETTING_BASIC(Variant::INT, PROPERTY_HINT_RANGE, "interface/touchscreen/phone_text_pan_percent", 100, "25,200,5")
++	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_show_shortcuts", false, "")
 +	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_symbol_bar", false, "")
 +	EDITOR_SETTING_BASIC(Variant::BOOL, PROPERTY_HINT_NONE, "interface/touchscreen/phone_code_minimap", false, "")
 +
  	// Scene tabs
  	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_ENUM, "interface/scene_tabs/display_close_button", 1, "Never,If Tab Active,Always"); // TabBar::CloseButtonDisplayPolicy
  	_initial_set("interface/scene_tabs/show_thumbnail_on_hover", true);
-@@ -1976,6 +1983,22 @@ String EditorSettings::get_editor_layouts_config() const {
+@@ -1976,6 +1984,22 @@ String EditorSettings::get_editor_layouts_config() const {
  }
  
  float EditorSettings::get_auto_display_scale() {
@@ -2123,7 +2257,7 @@ index 1fd7478..095efdc 100644
  	void process_pan(Point2 p_pos, Vector2 p_delta);
  	void process_joy_event(JoypadEvent p_event);
 diff --git a/platform/android/java/editor/build.gradle b/platform/android/java/editor/build.gradle
-index fcbb102..19df17b 100644
+index fcbb102..f10f675 100644
 --- a/platform/android/java/editor/build.gradle
 +++ b/platform/android/java/editor/build.gradle
 @@ -60,13 +60,16 @@ ext {
@@ -2132,8 +2266,8 @@ index fcbb102..19df17b 100644
      int libraryVersionCode = getGodotLibraryVersionCode()
 -    return (libraryVersionCode * editorBuildNumberOffset) + getEditorBuildNumber()
 +    def phoneBuild = System.getenv("GODOT_PHONE_BUILD_NUMBER")
-+    int build = phoneBuild ? Integer.parseInt(phoneBuild) : 4
-+    if (build < 4 || build > 99999) throw new GradleException("GODOT_PHONE_BUILD_NUMBER must be in 4..99999")
++    int build = phoneBuild ? Integer.parseInt(phoneBuild) : 5
++    if (build < 5 || build > 99999) throw new GradleException("GODOT_PHONE_BUILD_NUMBER must be in 5..99999")
 +    return 40702500 + build
  }
  
@@ -2141,7 +2275,7 @@ index fcbb102..19df17b 100644
      String libraryVersionName = getGodotLibraryVersionName()
      int buildNumber = getEditorBuildNumber()
 -    return buildNumber == 0 ? libraryVersionName : libraryVersionName + ".$buildNumber"
-+    return libraryVersionName + ".phone3.5.0." + (System.getenv("GODOT_PHONE_BUILD_NUMBER") ?: "4")
++    return libraryVersionName + ".phone3.6.0." + (System.getenv("GODOT_PHONE_BUILD_NUMBER") ?: "5")
  }
  
  android {

@@ -948,7 +948,70 @@ func _test_script_reopen_colors(base: Control) -> void:
 				get_viewport().get_texture().get_image().save_png(OS.get_environment("PHONE_LAYOUT_OUTPUT").path_join("script-reopen-%sx%s.png" % [window_size.x,window_size.y]))
 
 
+func _test_phone_scene(base: Control) -> void:
+	_mark("phone_scene_chrome")
+	var settings := EditorInterface.get_editor_settings()
+	settings.set_setting("editors/3d/navigation/show_viewport_navigation_gizmo", true)
+	settings.set_setting("interface/touchscreen/phone_show_shortcuts", false)
+	EditorInterface.set_main_screen_editor("3D")
+	await _settle(25)
+	var scale := float(OS.get_environment("PHONE_LAYOUT_SCALE"))
+	var top := base.find_child("PhoneTopBarScroll", true, false) as ScrollContainer
+	_expect(top != null and not top.get_h_scroll_bar().is_visible_in_tree(), "Phone header still reserves a scrollbar row")
+	var shortcuts := base.find_child("PhoneTouchActionsScroll", true, false) as Control
+	_expect(shortcuts == null or not shortcuts.is_visible_in_tree(), "Phone shortcuts consume viewport width by default")
+	var menu := base.find_child("PhoneMainMenu", true, false) as Button
+	_expect(menu != null and menu.text.is_empty(), "Phone main menu still has a long desktop title")
+	var primary := base.find_child("Phone3DPrimary", true, false) as Container
+	_expect(primary != null, "Missing phone 3D primary toolbar")
+	if primary == null:
+		return
+	_inside_window(primary, "3D primary toolbar")
+	_expect(primary.get_child_count() == 5, "3D secondary controls leaked into the primary row")
+	_expect(primary.size.y <= 56 * scale, "3D primary toolbar wraps into extra rows")
+	for child in primary.get_children():
+		if child is Button:
+			_expect(child.size.x >= 48 * scale - 1 and child.size.y >= 48 * scale - 1, "3D touch target too small")
+	var sticks := base.find_children("Phone*Joystick", "Control", true, false)
+	var visible_sticks := 0
+	for stick in sticks:
+		if not stick.is_visible_in_tree():
+			continue
+		visible_sticks += 1
+		_inside_window(stick, stick.name)
+		_expect(stick.size.x <= 74 * scale and stick.size.y <= 74 * scale, "Navigation joystick obscures the scene")
+		var surface := stick.get_parent() as Control
+		_expect(surface.size.x >= get_tree().root.size.x * 0.9, "3D viewport loses width to persistent chrome")
+	_expect(visible_sticks == 2, "Android navigation controls were not exercised")
+	var output := OS.get_environment("PHONE_LAYOUT_OUTPUT")
+	DirAccess.make_dir_recursive_absolute(output)
+	RenderingServer.force_draw(false)
+	get_viewport().get_texture().get_image().save_png(output.path_join("scene-phone-%sx%s.png" % [get_tree().root.size.x, get_tree().root.size.y]))
+	await _tap_button(base.find_child("Phone3DMore", true, false) as Button)
+	var popup := base.find_child("Phone3DToolsPopup", true, false) as PopupPanel
+	_expect(popup != null and popup.visible, "3D tools do not open from a native tap")
+	if popup != null:
+		_expect(popup.size.x <= get_tree().root.size.x and popup.size.y <= get_tree().root.size.y, "3D tools popup exceeds phone window")
+		RenderingServer.force_draw(false)
+		get_viewport().get_texture().get_image().save_png(output.path_join("scene-tools-%sx%s.png" % [get_tree().root.size.x, get_tree().root.size.y]))
+		popup.hide()
+	await _settle()
+	var sections := base.find_child("PhoneSections", true, false) as MenuButton
+	sections.get_popup().emit_signal("about_to_popup")
+	var toggle_index := sections.get_popup().get_item_index(106)
+	_expect(toggle_index >= 0, "Shortcut panel cannot be restored from the menu")
+	sections.get_popup().emit_signal("id_pressed", 106)
+	await _settle(25)
+	shortcuts = base.find_child("PhoneTouchActionsScroll", true, false) as Control
+	_expect(shortcuts != null and shortcuts.is_visible_in_tree(), "Shortcut panel toggle failed")
+	sections.get_popup().emit_signal("id_pressed", 106)
+	await _settle(25)
+	shortcuts = base.find_child("PhoneTouchActionsScroll", true, false) as Control
+	_expect(shortcuts == null or not shortcuts.is_visible_in_tree(), "Shortcut panel does not collapse")
+	observations.append({"control": "phone_scene", "window": str(get_tree().root.size), "scope": "Android-default joysticks, 3D toolbar, native-tap tool popup and reversible shortcut panel"})
+
 func _test_phone_ux(base: Control) -> void:
+	await _test_phone_scene(base)
 	_mark("phone_ux")
 	EditorInterface.set_main_screen_editor("Script")
 	EditorInterface.set_main_screen_editor("Script")

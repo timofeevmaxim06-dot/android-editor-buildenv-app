@@ -1,4 +1,4 @@
-name: Godot Phone 3.5.0 - Poco CI
+name: Godot Phone 3.6.0 - Poco CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  GODOT_PHONE_BUILD_NUMBER: 4
+  GODOT_PHONE_BUILD_NUMBER: 5
 
 permissions:
   contents: read
@@ -87,7 +87,7 @@ jobs:
       - name: Upload test binary for diagnosis
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.5.0-linux-test-binary
+          name: godot-phone-preview-3.6.0-linux-test-binary
           path: godot/bin/godot.linuxbsd.editor.x86_64
           retention-days: 7
           if-no-files-found: error
@@ -160,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.5.0-layout
+          name: godot-phone-preview-3.6.0-layout
           path: layout-evidence/
           if-no-files-found: warn
           retention-days: 30
@@ -190,7 +190,7 @@ jobs:
           python recipe/phone_editor/test_mobile_patch_v3.py godot 2>&1 | tee evidence/source-tests.txt
           python recipe/phone_editor/apply_mobile_patch_v3.py godot | tee evidence/patch-manifest.json
           git -C godot diff --check
-          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.5.0.patch
+          git -C godot diff --binary > evidence/GODOT-PHONE-PREVIEW-3.6.0.patch
           cp recipe/phone_editor/README-v3.md evidence/README.md
           git -C recipe rev-parse HEAD > evidence/RECIPE-COMMIT.txt
           git -C godot rev-parse HEAD > evidence/GODOT-COMMIT.txt
@@ -317,7 +317,7 @@ jobs:
       - name: Upload APK only after verification
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.5.0-apk
+          name: godot-phone-preview-3.6.0-apk
           path: deliverables/
           if-no-files-found: error
           retention-days: 30
@@ -325,7 +325,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: godot-phone-preview-3.5.0-evidence
+          name: godot-phone-preview-3.6.0-evidence
           path: evidence/
           if-no-files-found: warn
           retention-days: 30

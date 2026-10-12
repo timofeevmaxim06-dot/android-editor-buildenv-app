@@ -1,4 +1,4 @@
-# Godot Phone 3.5.0
+# Godot Phone 3.6.0
 
 Локально восстановленная ветка мобильного редактора. Основа Godot 4.7.2:
 `ed1daf0bf001b61586d9930840f2f1394092c079`. Сохранённый рецепт 3.2:
@@ -8,7 +8,27 @@
 сохранённым результатам и требованиям пользователя, затем доработаны.
 Это не побайтовая копия прежнего патча. Исходники игры и её реестры не менялись.
 
-## Изменения 3.5.0
+## Изменения 3.6.0
+
+По реальному скриншоту телефона исправлена перегруженная компоновка сцены:
+- верхнее меню без длинной подписи и отдельной полосы прокрутки;
+- 2D / 3D / Script в начале навигации, остальные панели доступны свайпом и через меню;
+- боковая панель сочетаний скрыта по умолчанию, восстанавливается через меню разделов;
+- четыре основных режима 3D и штатное меню дополнительных инструментов вместо нескольких рядов;
+- джойстики 72 единицы масштаба вместо 150, соразмерная рукоятка;
+- версия убрана из тесной строки вывода (остаётся в «О программе»).
+
+Это изменение компоновки, а не доказательство прироста FPS. Полная проверка Android IME,
+системных отступов и поведения на физическом Poco требует установки APK.
+
+Источники решений: [Godot #13945](https://github.com/godotengine/godot-proposals/issues/13945),
+[Android adaptive apps](https://developer.android.com/develop/adaptive-apps/guides/get-started-with-adaptive-apps),
+[Android accessibility](https://developer.android.com/guide/topics/ui/accessibility/apps),
+[Nomad interface](https://nomadsculpt.com/manual/interface), [Nomad camera](https://nomadsculpt.com/manual/camera).
+Сохранены нативные сигналы, обработчики и настройки Godot; схема жестов Nomad не копируется
+поверх выбора/манипуляторов Godot без проверки конфликтов.
+
+## Сохранённые изменения 3.5.0
 
 Основа — проверенная сборка 3.4.1, рецепт `404f5bb5b0e8cc424f4974a8f49e12d3dc2fa1de`.
 Задача: цельный Android-интерфейс без дополнительных дублирующих панелей.
@@ -91,8 +111,8 @@
 
 - пакет `org.godotengine.editor.v4.phonepreview31.debug`;
 - сертификат SHA-256 `921564d50b125fc1dfbe2209be475ed2172adf8be7f472532f212819715d3e8c`;
-- `GODOT_PHONE_BUILD_NUMBER=4`, versionCode `40702504` (у 3.4.1 — `40702503`);
-- versionName `4.7.2.stable.phone3.5.0.4`.
+- `GODOT_PHONE_BUILD_NUMBER=5`, versionCode `40702505` (у 3.4.1 — `40702503`);
+- versionName `4.7.2.stable.phone3.6.0.5`.
 
 Следующая версия должна увеличить `GODOT_PHONE_BUILD_NUMBER`. Ключ и пакет
 менять нельзя, если требуется обновление поверх установленного приложения.
@@ -108,7 +128,7 @@
    Build Tools 36.1.0 и NDK 29.0.14206865.
 5. В Godot запустить `python3 misc/scripts/install_swappy_android.py`.
 6. `scons platform=android target=editor arch=arm64 production=yes -j2`.
-7. Из `platform/android/java`: `GODOT_PHONE_BUILD_NUMBER=4 ./gradlew generateGodotEditor --no-daemon`.
+7. Из `platform/android/java`: `GODOT_PHONE_BUILD_NUMBER=5 ./gradlew generateGodotEditor --no-daemon`.
 8. Проверить готовый APK скриптом `verify_apk.py` с настроенными JAVA_HOME и ANDROID_HOME.
 
 Точная сборочная последовательность и Linux-проверки описаны также в
