@@ -429,7 +429,7 @@ index 78ec499..db38de4 100644
  	bool is_button_enabled(int p_index) const;
  
 diff --git a/editor/editor_node.cpp b/editor/editor_node.cpp
-index 5bc4649..ba1f341 100644
+index 5bc4649..00de2b9 100644
 --- a/editor/editor_node.cpp
 +++ b/editor/editor_node.cpp
 @@ -30,6 +30,9 @@
@@ -452,16 +452,20 @@ index 5bc4649..ba1f341 100644
  
  #include "modules/modules_enabled.gen.h" // For gdscript, mono.
  
-@@ -1171,7 +1172,7 @@ void EditorNode::_notification(int p_what) {
+@@ -1170,11 +1171,9 @@ void EditorNode::_notification(int p_what) {
+ 				EditorHelpHighlighter::get_singleton()->reset_cache();
  			}
  #endif
- #ifdef ANDROID_ENABLED
+-#ifdef ANDROID_ENABLED
 -			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel")) {
-+			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel") || EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/phone_show_shortcuts")) {
++			if (main_hbox && (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/touch_actions_panel") || EditorSettings::get_singleton()->check_changed_settings_in_group("interface/touchscreen/phone_show_shortcuts"))) {
  				_touch_actions_panel_mode_changed();
  			}
- #endif
-@@ -2062,6 +2063,36 @@ void EditorNode::clear_node_reference(Ref<Resource> p_res) {
+-#endif
+ 		} break;
+ 	}
+ }
+@@ -2062,6 +2061,37 @@ void EditorNode::clear_node_reference(Ref<Resource> p_res) {
  	}
  }
  
@@ -490,6 +494,7 @@ index 5bc4649..ba1f341 100644
 +		case 6: {
 +			const bool show = !(bool)EDITOR_GET("interface/touchscreen/phone_show_shortcuts");
 +			EditorSettings::get_singleton()->set("interface/touchscreen/phone_show_shortcuts", show);
++			EditorSettings::get_singleton()->notify_changes();
 +			EditorSettings::get_singleton()->save();
 +		} break;
 +	}
@@ -498,7 +503,18 @@ index 5bc4649..ba1f341 100644
  void EditorNode::_menu_option(int p_option) {
  	_menu_option_confirm(p_option, false);
  }
-@@ -8236,7 +8267,14 @@ void EditorNode::_update_main_menu_type() {
+@@ -8190,7 +8220,9 @@ void EditorNode::_update_main_menu_type() {
+ 	bool use_menu_button = EDITOR_GET("interface/editor/appearance/collapse_main_menu");
+ 	bool global_menu = !bool(EDITOR_GET("interface/editor/appearance/use_embedded_menu")) && NativeMenu::get_singleton()->has_feature(NativeMenu::FEATURE_GLOBAL_MENU);
+ 	MenuType new_menu_type;
+-	if (global_menu) {
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		new_menu_type = MENU_TYPE_COMPACT;
++	} else if (global_menu) {
+ 		new_menu_type = MENU_TYPE_GLOBAL;
+ 	} else if (use_menu_button) {
+ 		new_menu_type = MENU_TYPE_COMPACT;
+@@ -8236,7 +8268,14 @@ void EditorNode::_update_main_menu_type() {
  	// Create new menu.
  	if (new_menu_type == MENU_TYPE_COMPACT) {
  		main_menu_button = memnew(MenuButton);
@@ -514,7 +530,7 @@ index 5bc4649..ba1f341 100644
  		main_menu_button->set_theme_type_variation("MainScreenButton");
  		main_menu_button->set_focus_mode(Control::FOCUS_NONE);
  		if (is_inside_tree()) {
-@@ -8292,9 +8330,11 @@ void EditorNode::_bottom_panel_resized() {
+@@ -8292,9 +8331,11 @@ void EditorNode::_bottom_panel_resized() {
  	bottom_panel->set_bottom_panel_offset(center_split->get_split_offset());
  }
  
@@ -527,7 +543,7 @@ index 5bc4649..ba1f341 100644
  	switch (panel_mode) {
  		case 1:
  			if (touch_actions_panel != nullptr) {
-@@ -8318,7 +8358,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
+@@ -8318,7 +8359,6 @@ void EditorNode::_touch_actions_panel_mode_changed() {
  			break;
  	}
  }
@@ -535,7 +551,7 @@ index 5bc4649..ba1f341 100644
  
  #ifdef MACOS_ENABLED
  extern "C" GameViewPluginBase *get_game_view_plugin();
-@@ -8479,7 +8518,13 @@ EditorNode::EditorNode() {
+@@ -8479,7 +8519,13 @@ EditorNode::EditorNode() {
  	// Define a minimum window size to prevent UI elements from overlapping or being cut off.
  	Window *w = Object::cast_to<Window>(SceneTree::get_singleton()->get_root());
  	if (w) {
@@ -550,7 +566,7 @@ index 5bc4649..ba1f341 100644
  		w->set_min_size(minimum_size); // Calling it this early doesn't sync the property with DS.
  		DisplayServer::get_singleton()->window_set_min_size(minimum_size);
  	}
-@@ -8672,12 +8717,28 @@ EditorNode::EditorNode() {
+@@ -8672,12 +8718,28 @@ EditorNode::EditorNode() {
  
  	main_vbox = memnew(VBoxContainer);
  
@@ -580,7 +596,7 @@ index 5bc4649..ba1f341 100644
  
  	main_hbox = memnew(HBoxContainer);
  	main_hbox->add_child(main_vbox);
-@@ -8688,12 +8749,25 @@ EditorNode::EditorNode() {
+@@ -8688,12 +8750,25 @@ EditorNode::EditorNode() {
  	_touch_actions_panel_mode_changed();
  
  	gui_base->add_child(base_vbox);
@@ -609,7 +625,7 @@ index 5bc4649..ba1f341 100644
  
  	DockSplitContainer *main_vsplit = memnew(DockSplitContainer);
  	main_vsplit->set_name("DockVSplitMain");
-@@ -8711,6 +8785,7 @@ EditorNode::EditorNode() {
+@@ -8711,6 +8786,7 @@ EditorNode::EditorNode() {
  	left_l_vsplit->set_vertical(true);
  	main_hsplit->add_child(left_l_vsplit);
  
@@ -617,7 +633,7 @@ index 5bc4649..ba1f341 100644
  	LocalVector<DockTabContainer *> dock_slots;
  	{
  		DockTabContainer *dock_container = memnew(SideDockTabContainer(EditorDock::DOCK_SLOT_LEFT_UL, Rect2i(0, 0, 1, 3)));
-@@ -8864,6 +8939,60 @@ EditorNode::EditorNode() {
+@@ -8864,6 +8940,60 @@ EditorNode::EditorNode() {
  	srt->add_child(editor_main_screen);
  	editor_main_screen->set_v_size_flags(Control::SIZE_EXPAND_FILL);
  
@@ -678,7 +694,7 @@ index 5bc4649..ba1f341 100644
  	scene_root = memnew(SubViewport);
  	scene_root->set_auto_translate_mode(AUTO_TRANSLATE_MODE_ALWAYS);
  	scene_root->set_translation_domain(StringName());
-@@ -9076,8 +9205,14 @@ EditorNode::EditorNode() {
+@@ -9076,8 +9206,14 @@ EditorNode::EditorNode() {
  	main_editor_button_hb->set_mouse_filter(Control::MOUSE_FILTER_STOP);
  	main_editor_button_hb->set_name("EditorMainScreenButtons");
  	editor_main_screen->set_button_container(main_editor_button_hb);
@@ -695,7 +711,7 @@ index 5bc4649..ba1f341 100644
  
  	// Spacer to center 2D / 3D / Script buttons.
  	right_spacer = memnew(Control);
-@@ -9190,6 +9325,7 @@ EditorNode::EditorNode() {
+@@ -9190,6 +9326,7 @@ EditorNode::EditorNode() {
  	history_dock = memnew(HistoryDock);
  	editor_dock_manager->add_dock(history_dock);
  
@@ -1436,7 +1452,7 @@ index 8569fcf..640dcb4 100644
  	// Add a dummy control node for horizontal spacing.
  	Control *h_spacer = memnew(Control);
 diff --git a/editor/gui/touch_actions_panel.cpp b/editor/gui/touch_actions_panel.cpp
-index a2017eb..e5b48fe 100644
+index a2017eb..f12199a 100644
 --- a/editor/gui/touch_actions_panel.cpp
 +++ b/editor/gui/touch_actions_panel.cpp
 @@ -37,6 +37,7 @@
@@ -1447,7 +1463,22 @@ index a2017eb..e5b48fe 100644
  #include "scene/resources/style_box_flat.h"
  #include "servers/display/display_server.h"
  
-@@ -247,7 +248,18 @@ TouchActionsPanel::TouchActionsPanel() {
+@@ -90,7 +91,13 @@ void TouchActionsPanel::input(const Ref<InputEvent> &event) {
+ }
+ 
+ void TouchActionsPanel::_hardware_keyboard_connected(bool p_connected) {
+-	set_visible(!p_connected);
++	// Explicitly opened phone shortcuts remain useful with a hardware keyboard.
++	// Desktop/XR legacy behaviour still hides the automatically embedded panel.
++	if ((bool)EDITOR_GET("interface/touchscreen/phone_single_panel_mode")) {
++		set_visible(EDITOR_GET("interface/touchscreen/phone_show_shortcuts"));
++	} else {
++		set_visible(!p_connected);
++	}
+ }
+ 
+ void TouchActionsPanel::_simulate_editor_shortcut(const String &p_shortcut_name) {
+@@ -247,7 +254,18 @@ TouchActionsPanel::TouchActionsPanel() {
  	} else {
  		box->set_vertical(true);
  	}

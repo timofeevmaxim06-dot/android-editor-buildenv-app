@@ -953,6 +953,7 @@ func _test_phone_scene(base: Control) -> void:
 	var settings := EditorInterface.get_editor_settings()
 	settings.set_setting("editors/3d/navigation/show_viewport_navigation_gizmo", true)
 	settings.set_setting("interface/touchscreen/phone_show_shortcuts", false)
+	get_tree().root.propagate_notification(EditorSettings.NOTIFICATION_EDITOR_SETTINGS_CHANGED)
 	EditorInterface.set_main_screen_editor("3D")
 	await _settle(25)
 	var scale := float(OS.get_environment("PHONE_LAYOUT_SCALE"))
